@@ -19,10 +19,16 @@ class clickLocation:
         self.upgrade_coord = [x - 207, y - 56]
         self.sell_coord =    [x + 142, y - 55]
 
-class Settings(LabelFrame):
+class EmptyFrame(Frame):
+    def __init__(self):
+        Frame.__init__()
+        self.label=Label(text="Kies een programma")
+        self.label.grid(row=1, column=1, padx=20, pady=15)
+
+class Crafting(LabelFrame):
     def __init__(self, parent):
         self.parent=parent
-        LabelFrame.__init__(self, parent, text="Settings:")
+        LabelFrame.__init__(self, parent, text="Crafting:")
         # self.clicker=clickLocation()
         self.main_x=IntVar()
         self.main_y=IntVar()
@@ -48,8 +54,8 @@ class Settings(LabelFrame):
         self.set_source2.grid(row=3, column=3)
         self.check_upgrade=Checkbutton(self, text="upgrade", variable=self.upgrade)
         self.check_upgrade.grid(row=4, column=2)
-        self.but_start=Button(self, text="start", command=self.parent.start)
-        self.but_stop=Button(self, text="stop", command=self.parent.stop)
+        self.but_start=Button(self, text="start", command=self.parent.start_crafting)
+        self.but_stop=Button(self, text="stop", command=self.parent.stop_crafting)
         self.but_start.grid(row=5, column=2)
         self.but_stop.grid(row=5, column=3, columnspan=2)
 
@@ -67,32 +73,42 @@ class MainApp(Tk):
         self.running=False
         self.root = Tk.__init__(self)
         self.device=Adb_Device()
-        self.settings=Settings(self)
-        self.settings.grid(row=1, column=1)
+        self.frame=EmptyFrame()
+        self.frame.grid(row=2, column=1)
+        self.games=["Crafting", "Deep Town"]
+        self.option=StringVar()
+        self.option.set(self.games[0])
+        self.dropdown = OptionMenu(self, self.option, *self.games, command=display_selected)
+        self.dropdown.grid(self, row=1, column=1, columnspan=3)
 
-    def start(self):
+    def display_selected(self, option):
+        print(option)
+        # self.frame=Crafting(self)
+        # self.frame.grid(row=2, column=1)
+
+    def start_crafting(self):
         if not self.running:
             self.running=True
-            self.click()
+            self.click_crafting()
 
-    def click(self):
+    def click_crafting(self):
         if self.running:
-            sets={self.settings.source1.get():self.settings.data.source1_coord,
-                  self.settings.source2.get():self.settings.data.source2_coord}
+            sets={self.crafting.source1.get():self.crafting.data.source1_coord,
+                  self.crafting.source2.get():self.crafting.data.source2_coord}
             for set,coord in sets.items():
                 x,y=coord
                 for i in range(set):
                     self.device.tap(x,y)
             for i in range(10):
-                self.device.tap(self.settings.main_x.get(), self.settings.main_y.get())
-            x,y=self.settings.data.sell_coord
+                self.device.tap(self.crafting.main_x.get(), self.crafting.main_y.get())
+            x,y=self.crafting.data.sell_coord
             self.device.tap(x,y)
-            if self.settings.upgrade.get():
-                x,y=self.settings.data.upgrade_coord
+            if self.crafting.upgrade.get():
+                x,y=self.crafting.data.upgrade_coord
                 self.device.tap(x,y)
             self.after(100, self.click)
 
-    def stop(self):
+    def stop_crafting(self):
         self.running=False
 
 
