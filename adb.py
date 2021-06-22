@@ -1,6 +1,7 @@
 from os import path
 from math import isclose,sqrt
 from time import sleep
+import cv2
 import numpy as np
 from ppadb.client import Client
 from logger import MyLogger, logging
@@ -160,6 +161,9 @@ class Adb_Device():
         self.device.shell(f'input tap {x} {y}')
         # sleep(.03)
 
+    def go_back(self):
+        self.device.shell('input keyevent 4')
+
     def trace(self, waypoints, size=0, pressure=0):
         eventlist=[]
         for waypoint in waypoints:
@@ -273,7 +277,7 @@ class Adb_Device():
         (b,g,r) = img[y,x]
         return [r,g,b]
 
-    def locate_item(self,templates,threshold=0.75,margin=0.05,one=False,offset=[30,16],last=False):
+    def locate_item(self,templates,threshold=0.75,margin=0.05,one=False,offset=[30,16],last=False, show=False):
         result_file=path.join('images','result.png')
         img_base=self.lastscreen if last else self.load_screenCap()
         img_result=img_base
@@ -293,9 +297,10 @@ class Adb_Device():
                 for vector in loclist:
                     x,y=vector
                     cv2.circle(img_result, (x,y), 10, (0,255,0), -1)
-        # cv2.imwrite(result_file, img_result)
+        if show:
+            cv2.imwrite(result_file, img_result)
         self.output.update(img_result)
         if one and len(loclist):
-            target=[self.res_x/2, self.res_y/2]
+            target=[self.res_x, self.res_y/2]
             loclist=self.getClosest(loclist, target)
         return loclist
