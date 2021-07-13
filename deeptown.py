@@ -454,22 +454,31 @@ class DeepTown(LabelFrame):
                     # self.device.go_back()
 
     def searchAds(self):
-        images=["return","store","store2","free_chest","watch_free","claim"]
+        images=["return","store","store2","watch_free","claim"]
         if self.checkTemplates(images):
-            if self.move_home() and self.tap("free_chest"):
-                location=self.device.locate_item([self.templates["watch_free"],self.templates["watch"]],.75,one=True)
-                count=0
-                while location and count<10:
-                    self.watchAd(location, "return")
-                    count+=1
-                    location=self.device.locate_item([self.templates["watch_free"],self.templates["watch"]],.75,one=True)
-                self.tap("return")
-            # self.logger.debug("checking store")
+            self.move_home()
+            # if self.move_home() and self.tap("free_chest"):
+            #     count=0
+            #     for image in ["watch_free", ""]
+            #     location=self.device.locate_item([self.templates["watch_free"]],.75,one=True)
+            #     while location and count<5:
+            #         self.watchAd(location, "return")
+            #         count+=1
+            #         location=self.device.locate_item([self.templates["watch_free"]],.75,one=True)
+            #     location=self.device.locate_item([self.templates["watch"]],.75,one=True)
+            #     while location and count<5:
+            #         self.watchAd(location, "return")
+            #         count+=1
+            #         location=self.device.locate_item([self.templates["watch"]],.75,one=True)
+            #     self.tap("return")
+            # # self.logger.debug("checking store")
             if self.tap("store") or self.tap("store2"):
-                location=self.device.locate_item([self.templates["claim"],self.templates["watch"]],.75,one=True)
                 count=0
-                while location and count<10:
-                    self.watchAd(location, "return")
-                    count+=1
-                    location=self.device.locate_item([self.templates["claim"],self.templates["watch"]],.75,one=True)
+                for image in ["watch_free","claim"]:
+                    location=self.device.locate_item([self.templates[image]],.75,one=True)
+                    while (location and count<5):
+                        self.watchAd(location, "return")
+                        sleep(2)
+                        count+=1
+                        location=self.device.locate_item([self.templates[image]],.75,one=True)
                 self.tap("return")
