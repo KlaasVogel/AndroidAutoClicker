@@ -119,6 +119,30 @@ class Adb_Device():
                 newlist.append(vector)
         return newlist
 
+    def getApplist(self):
+        print(self.device.shell('dumpsys window windows | grep -i "mCurrentFocus"'))
+        result=self.device.shell('dumpsys window a | grep "/" | cut -d "{" -f2 | cut -d "/" -f1 | cut -d " " -f2')
+        return result
+
+
+    def closeApp(self, appname):
+        applist=self.getApplist()
+        if appname in applist:
+            apps=applist.split()
+            for app in apps:
+                if appname in app:
+                    self.device.shell(f"am force-stop {app}")
+                    return app
+        else:
+            return False
+
+    def restartApp(self, appname, activity="none"):
+        app=self.closeApp(appname)
+        sleep(3)
+        if app and activity:
+            shellcmd=f"am start -n {app}/{app}.{activity}"
+            self.device.shell(shellcmd)
+
     def release_all(self):
         shellcmd= f"{self.touch} 3 57 -1  && {self.touch} 0 2 0 && {self.touch} 0 0 0"
         self.device.shell(shellcmd)
