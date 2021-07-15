@@ -1,4 +1,4 @@
-from tkinter import Tk, IntVar, StringVar, Label
+from tkinter import Tk, IntVar, StringVar, Label, Text
 from tkinter.ttk import Frame, LabelFrame, Button, Checkbutton, Entry
 from dataclasses import dataclass, field
 from os import path, getcwd, mkdir
@@ -10,7 +10,7 @@ from logger import MyLogger, logging
 import json
 import traceback
 import random
-from time import time
+from time import time, localtime, strftime
 
 def build_dir(map):
     if not path.isdir(map):
@@ -44,6 +44,25 @@ def findFile(name, filelist):
             return file
     else:
         return False
+
+def printtime(seconds):
+    if seconds <= 60:
+        return f"{int(seconds)} seconds"
+    if seconds <= 60*60:
+        min=int(seconds/60)
+        sec=int(seconds%60)
+        return f"{min} minute(s) and {sec} seconds"
+    hour=int(seconds/3600)
+    min=int((seconds%3600)/60)
+    sec=int(seconds%60)
+    text=f"{hour} hour(s)"
+    sep=", " if (min and sec) else " and "
+    text=text+sep
+    if min:
+        text=text+f"{min} minute(s)"
+    if sec:
+        text=text+f" and {sec} seconds"
+    return text
 
 @dataclass
 class DT_Resource():
@@ -85,11 +104,16 @@ class Task():
     time: float
 
 class Tasklist(dict):
-    def __init__(self,parent):
-        self.log=parent.logger
+    def __init__(self,parent,output1, output2, output3):
         self.parent=parent
+        self.log=parent.logger
+        self.listOutput=output1
+        self.taskOutput=output2
+        self.console=output3
         self.paused=True
         self.busy=False
+        self.lasttask=None
+        self.update()
 
     def start(self):
         self.paused=False
@@ -117,13 +141,39 @@ class Tasklist(dict):
                 firsttask=sorted(self)[0]
                 if firsttask<=cur_time and not self.busy:
                     task=self.pop(firsttask)
-                    print(task)
+                    self.taskOutput.set(task.name)
                     if getattr(self.parent, task.check):
                         self.busy=True
                         task.job()
                         self.busy=False
                         self.setTask(task)
-            sleep(5)
+            sleep(1)
+
+    def getData(self):
+        data=[]
+        timelist=sorted(self)
+        cur_time=int(time())
+        data.append(strftime("%H:%M:%S",localtime()))
+        for tasktime in timelist:
+            remaining_time=tasktime-cur_time
+            task=self[tasktime]
+            data.append(f"{task.name} in {printtime(remaining_time)}")
+        return data
+
+    def update(self):
+        try:
+            data=self.getData()
+            self.listOutput.delete("1.0","end")
+            for line in data:
+                self.listOutput.insert("end",str(line)+"\n")
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            self.parent.after(1000, self.update)
+
+class Shaft(LabelFrame):
+    def __init__(self, parent):
+        pass
 
 class DeepTown(LabelFrame):
     def __init__(self, parent, device):
@@ -131,16 +181,22 @@ class DeepTown(LabelFrame):
         self.parent=parent
         self.device=device
         self.scanned={}
-        self.tasklist=Tasklist(self)
         LabelFrame.__init__(self, parent, text="Deep Town")
         self.frames=[]
         for i in range(4):
             self.frames.append(Frame(self.parent))
             self.frames[-1].grid(row=1, rowspan=10, column=i+1)
+        self.textList=Text(self.frames[1],height=7)
+        self.stringTask=StringVar()
+        self.labelTask=Label(self.frames[1], textvariable=self.stringTask)
+        self.textConsole=Text(self.frames[1],height=7)
+        self.textList.grid(row=2, column=1)
+        self.labelTask.grid(row=1, column=1)
+        self.textConsole.grid(row=3, column=1)
+        self.tasklist=Tasklist(self,self.textList,self.stringTask,self.textConsole)
         self.dir_images=build_dir("DT_images")
         self.loadTemplates(self.dir_images)
         self.buttons=self.build_buttons()
-
 
     def loadTemplates(self, map):
         self.templates=DT_Images()
@@ -148,31 +204,24 @@ class DeepTown(LabelFrame):
         for file in filelist:
             self.templates.addTemplate(file)
 
-        # datafile=path.join(map,'image_list.json')
-        # data=loadJSON(datafile)
-        # for name in data:
-        #     file = findFile(name, filelist)
-        #     if file:
-        #         self.templates.addTemplate(name,file)
-
     def build_label_button(self, name, check, button, command, time=5):
-        dict={"lbl": Label(self, text=f"{name}:"),
-              "btn": Button(self, text="Start", command=lambda: self.trigger(name,check,button,command,time))}
+        dict={"lbl": Label(self.frames[0], text=f"{name}:"),
+              "btn": Button(self.frames[0], text="Start", command=lambda: self.trigger(name,check,button,command,time))}
         return dict
 
     def build_buttons(self):
         list={}
-        list['prntscr']={"btn":Button(self, text="Print Screen", command=self.device.printScreen)}
-        list['areas']={"btn":Button(self, text="Areas")}
-        list['resources']={"btn":Button(self, text="Resources")}
-        list['running']={'btn':Button(self, text="Start Tasks", command=self.start_tasks)}
+        list['prntscr']={"btn":Button(self.frames[0], text="Print Screen", command=self.device.printScreen)}
+        list['areas']={"btn":Button(self.frames[0], text="Areas")}
+        list['resources']={"btn":Button(self.frames[0], text="Resources")}
+        list['running']={'btn':Button(self.frames[0], text="Start Tasks", command=self.start_tasks)}
         list['collect']=self.build_label_button("Collect", "collecting", "collect", self.collect,time=4)
         list['pump']=self.build_label_button("Pump", "collecting oil", "pump", self.pump,time=7)
-        list['explore']=self.build_label_button("Explore", "exploring", "explore", self.explore,time=60.1)
         list['boost']=self.build_label_button("Boost", "boosting", "boost", self.boost,time=2)
-        list['boost_prod']=self.build_label_button("Boost Production", "boosting_production", "boost_prod", self.boost_product,time=5.05)
+        list['boost_prod']=self.build_label_button("Boost Production", "boosting_production", "boost_prod", self.boost_product,time=3.05)
         list['cc']=self.build_label_button("Check Chests", "checking_chests", "cc", self.openChests,time=10)
         list['ca']=self.build_label_button("Check Ads", "checking_ads","ca",self.searchAds,time=6.01)
+        list['explore']=self.build_label_button("Explore", "exploring", "explore", self.explore,time=60.1)
         i = 1
         for dict in list.values():
             i+=1
@@ -234,8 +283,8 @@ class DeepTown(LabelFrame):
 
     def restart_app(self):
         print("restarting App")
-        self.device.restartApp("deeptown","AndroidLauncher")
-        sleep(20)
+        self.device.restartApp("com.rockbite.deeptown","AndroidLauncher")
+        sleep(10)
         if not self.move_home():
             quit()
 
@@ -304,7 +353,7 @@ class DeepTown(LabelFrame):
         if self.checkTemplates(images) and self.move_home():
             self.tap("main_down",3)
             if self.scanned.get("Collect",0)<time():
-                self.scanned['Collect']=time()+45*60
+                self.scanned['Collect']=time()+3*60*60
                 self.drilllist=[]
                 while (not self.tap("main_up")):
                     self.tap("mine_up",1)
@@ -317,12 +366,11 @@ class DeepTown(LabelFrame):
                     for collect in self.drilllist:
                         self.device.tap(*location)
                         sleep(.3)
-                        if collect:
-                            self.tap("mine_claim",.1)
-                    count=0
-                    while (not self.tap("main_up") and count<10):
-                        self.tap("mine_up")
-                        count+=1
+                        if collect and not self.tap("mine_claim",.1):
+                            print("resetting mines")
+                            self.scanned['Collect']=time()
+                    self.tap("surface")
+                    self.tap("main_up")
             self.tap("tower_down")
             self.tap("mine_claim",.1)
             self.move_home()
@@ -332,26 +380,29 @@ class DeepTown(LabelFrame):
         if self.checkTemplates(images) and self.move_home():
             self.tap("main_down",3)
             if self.scanned.get("Pump",0)<time():
-                self.scanned['Pump']=time()+45*60
+                print("scan pumps")
+                self.scanned['Pump']=time()+60*60*3
                 self.oillist=[]
                 while (not self.tap("main_up")):
                     if not self.tap("mine_up"):
                         break
                     val = True if self.tap("oil_claim",.1) else False
                     self.oillist.append(val)
-                    # self.logger.debug(val)
+                for i in range(1,len(self.oillist)):
+                    if self.oillist[-i]:
+                        if i>1:
+                            self.oillist=self.oillist[0:-(i-1)]
+                        break
             else:
+                print("start pumping")
                 location=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
                 if len(location):
                     for collect in self.oillist:
                         self.device.tap(*location)
                         sleep(.3)
-                        if collect:
-                            self.tap("oil_claim",.1)
-                    count=0
-                    while (not self.tap("main_up") and count<10):
-                        self.tap("mine_up")
-                        count+=1
+                        if collect and not self.tap("oil_claim",.1):
+                            print("resetting oil")
+                            self.scanned['Pump']=time()
             self.move_home()
 
     def boost(self):
@@ -359,7 +410,7 @@ class DeepTown(LabelFrame):
         if self.checkTemplates(images) and self.move_home():
             self.tap("main_down",3)
             if self.scanned.get("Boost",0)<time():
-                self.scanned['Boost']=time()+60*60
+                self.scanned['Boost']=time()+60*60*3
                 self.boostlist=[]
                 self.boosted=[]
                 while (not self.tap("main_up")):
@@ -377,7 +428,8 @@ class DeepTown(LabelFrame):
                     self.device.tap(*location)
                     sleep(.3)
                     if collect and not self.boosted[idx]:
-                        self.tap("mine_boost",.1)
+                        if not self.tap("mine_boost",.1):
+                            self.scanned['Boost']=time()
                         self.boosted[idx]=True
                         playbutton=self.device.locate_item([self.templates["boost_play"]],.8,one=True)
                         if playbutton:
@@ -385,7 +437,7 @@ class DeepTown(LabelFrame):
                             count+=1
                             # sleep(2)
                         self.tap("exit_boost",.2)
-                    if count>=5:
+                    if count>=3:
                         break
                 else:
                     for i in range(len(self.boosted)):
@@ -401,20 +453,20 @@ class DeepTown(LabelFrame):
             while len(button_dwn):
                 self.device.tap(*button_dwn)
                 sleep(.3)
-                self.tap("production_boost",.5,.6)
-                playbutton=self.device.locate_item([self.templates["boost_play"]],.7,one=True)
-                if playbutton:
+                if self.tap("production_boost",.5,.6):
+                    playbutton=self.device.locate_item([self.templates["boost_play"]],.7,one=True)
+                    if playbutton:
                     # print("found play-button")
-                    self.watchAd(playbutton,"exit_boost")
-                self.tap("exit_boost",.2)
+                        self.watchAd(playbutton,"exit_boost")
+                    self.tap("exit_boost",.2)
                 button_dwn=self.device.locate_item([self.templates["tower_down"]],.8,one=True)
         self.move_home()
 
 
     def openChests(self):
-        images=["return","free_chest","chest_available","menu_chest","closed_chest_small","closed_chest_big","open_chest_big"]
+        images=["return","inventory","menu_chest","closed_chest_small","closed_chest_big","open_chest_big"]
         if self.checkTemplates(images):
-            if self.move_home() and self.tap("chest_available"):
+            if self.move_home() and self.tap("inventory"):
                 self.tap("menu_chest")
                 location=self.device.locate_item([self.templates["closed_chest_small"]],.8,one=True)
                 count=0
@@ -427,7 +479,7 @@ class DeepTown(LabelFrame):
                     location=self.device.locate_item([self.templates["closed_chest_small"]],.8,one=True)
                 self.tap("return")
 
-    def watchAd(self, location, exit):
+    def watchAd(self, location, exit, showActivity=False):
         images=["close_video"]
         if self.checkTemplates(images):
             # print("watching Ad")
@@ -436,21 +488,17 @@ class DeepTown(LabelFrame):
             self.device.tap(*location)
             wait=random.randrange(35, 40)
             sleep(wait)
+            if showActivity:
+                self.device.getApplist(True)
             self.device.go_back()
             sleep(2)
             if not self.device.locate_item([self.templates[exit]],.8, one=True):
                 # self.logger.debug("Stuck on Ad?")
                 self.device.go_back()
-                cross_list=[]
-                for cross in images:
-                    cross_list.append(self.templates[cross])
-                newlocation=[300,300]
-                newlocation=self.device.locate_item(cross_list,.65, one=True)
-                if newlocation:
-                    # self.logger.debug("found Cross")
-                    self.device.tap(*newlocation)
-                    sleep(1)
-                    self.device.go_back()
+                newlocation=[851,44]
+                self.device.tap(*newlocation)
+                sleep(1)
+                self.device.go_back()
                     # self.device.go_back()
 
     def searchAds(self):
@@ -461,8 +509,11 @@ class DeepTown(LabelFrame):
                 count=0
                 for image in ["watch_free","claim"]:
                     location=self.device.locate_item([self.templates[image]],.75,one=True)
-                    while (location and count<5):
-                        self.watchAd(location, "return")
+                    self.logger.info(f"Ads: {image}")
+                    while (location and count<3):
+                        showInfo = True if image=="watch_free" else False
+                        # showInfo=True
+                        self.watchAd(location, "return", showInfo)
                         sleep(2)
                         count+=1
                         location=self.device.locate_item([self.templates[image]],.75,one=True)
