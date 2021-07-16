@@ -11,6 +11,7 @@ import json
 import traceback
 import random
 from time import time, localtime, strftime
+import numpy as np
 
 def build_dir(map):
     if not path.isdir(map):
@@ -63,6 +64,14 @@ def printtime(seconds):
     if sec:
         text=text+f" and {sec} seconds"
     return text
+
+def clearEnd(list):
+    for i in range(1,len(list)):
+        if list[-i]:
+            if i>1:
+                list=list[0:-(i-1)]
+            break
+    return list
 
 @dataclass
 class DT_Resource():
@@ -125,13 +134,16 @@ class Tasklist(dict):
         # self.log.debug(f'\n adding job for {name}')
         task=Task(name, check, job, waittime)
         self.setTask(task, True)
+        if not hasattr(self.parent, check):
+            setattr(self.parent, check, True)
 
     def setTask(self,task, firsttime=False):
-        # self.log.debug(f'\n resetting job for {task.name}')
-        new_time=0 if firsttime else int(time())+task.time*60
-        while new_time in self:
-            new_time+=1
-        self[new_time]=task
+        if task.time or firsttime:
+            # self.log.debug(f'\n resetting job for {task.name}')
+            new_time=0 if firsttime else int(time())+task.time*60
+            while new_time in self:
+                new_time+=1
+            self[new_time]=task
 
     def run(self):
         print(self)
@@ -153,7 +165,7 @@ class Tasklist(dict):
         data=[]
         timelist=sorted(self)
         cur_time=int(time())
-        data.append(strftime("%H:%M:%S",localtime()))
+        # data.append(strftime("%H:%M:%S",localtime()))
         for tasktime in timelist:
             remaining_time=tasktime-cur_time
             task=self[tasktime]
@@ -173,7 +185,7 @@ class Tasklist(dict):
 
 class Shaft(LabelFrame):
     def __init__(self, parent):
-        pass
+        LabelFrame.__init__(self, parent, text="Mineshaft:")
 
 class DeepTown(LabelFrame):
     def __init__(self, parent, device):
@@ -184,19 +196,23 @@ class DeepTown(LabelFrame):
         LabelFrame.__init__(self, parent, text="Deep Town")
         self.frames=[]
         for i in range(4):
-            self.frames.append(Frame(self.parent))
+            self.frames.append(Frame(self))
             self.frames[-1].grid(row=1, rowspan=10, column=i+1)
         self.textList=Text(self.frames[1],height=7)
         self.stringTask=StringVar()
         self.labelTask=Label(self.frames[1], textvariable=self.stringTask)
         self.textConsole=Text(self.frames[1],height=7)
         self.textList.grid(row=2, column=1)
-        self.labelTask.grid(row=1, column=1)
+        self.labelTask.grid(row=1, column=1, sticky='w')
         self.textConsole.grid(row=3, column=1)
         self.tasklist=Tasklist(self,self.textList,self.stringTask,self.textConsole)
+        self.plan_scan_shaft()
+        self.tasklist.addTask('Scan Tower', 'scanning tower', self.scan_tower, 0)
         self.dir_images=build_dir("DT_images")
         self.loadTemplates(self.dir_images)
         self.buttons=self.build_buttons()
+        self.boosted=[]
+        self.prod_boost_types=[2,3,6]
 
     def loadTemplates(self, map):
         self.templates=DT_Images()
@@ -215,10 +231,10 @@ class DeepTown(LabelFrame):
         list['areas']={"btn":Button(self.frames[0], text="Areas")}
         list['resources']={"btn":Button(self.frames[0], text="Resources")}
         list['running']={'btn':Button(self.frames[0], text="Start Tasks", command=self.start_tasks)}
-        list['collect']=self.build_label_button("Collect", "collecting", "collect", self.collect,time=4)
-        list['pump']=self.build_label_button("Pump", "collecting oil", "pump", self.pump,time=7)
+        list['collect']=self.build_label_button("Collect Ores", "collecting", "collect", lambda: self.collect(1),time=4)
+        list['pump']=self.build_label_button("Pump Oil", "collecting oil", "pump", lambda: self.collect(3),time=7)
         list['boost']=self.build_label_button("Boost", "boosting", "boost", self.boost,time=2)
-        list['boost_prod']=self.build_label_button("Boost Production", "boosting_production", "boost_prod", self.boost_product,time=3.05)
+        list['boost_prod']=self.build_label_button("Boost Production", "boosting_production", "boost_prod", self.boost_product,time=2.5)
         list['cc']=self.build_label_button("Check Chests", "checking_chests", "cc", self.openChests,time=10)
         list['ca']=self.build_label_button("Check Ads", "checking_ads","ca",self.searchAds,time=6.01)
         list['explore']=self.build_label_button("Explore", "exploring", "explore", self.explore,time=60.1)
@@ -308,20 +324,72 @@ class DeepTown(LabelFrame):
             return True
         return False
 
-    def upgrade_mines(self):
-        self.drones=True
-        images=["main_down", "mine_up", "mine_upgrade", "upgrade", "red_cross"]
+    def plan_scan_shaft(self):
+        self.tasklist.addTask('Scan Mineshaft', 'scanning shaft', self.scan_shaft, 0)
+        self.reset_shaft=True
+
+    def scan_shaft(self):
+        print("SCAN SHAFT")
+        self.shaft=[]
+        self.boosted=[]
+        self.reset_shaft=False
+        scanlist=[]
+        stations=["mining_station","chemical_mining","oil_pump"]
+        images=[]
+        for i in range(1,9):
+            images.append(f"level_{i}")
+        for station in stations:
+            images.append(f"text_{station}")
+        images.extend(["main_down", "mine_up", "info"])
         if self.checkTemplates(images) and self.move_home():
-            self.tap("main_down",1.5)
-            count=0
-            while (not self.tap("main_up")) and count<50 and (self.drones):
-                self.tap("mine_up")
-                if self.tap("mine_upgrade"):
-                    if self.tap("upgrade"):
-                        # self.logger.debug("whoot")
-                        sleep(5)
-                    else:
-                        self.device.go_back()
+            self.tap("main_down",2)
+            while(self.tap("mine_up")):
+                result=[0,0]
+                if len(self.device.locate_item([self.templates["info"]],.8,one=True)):
+                    for id,station in enumerate(stations):
+                        if len(self.device.locate_item([self.templates[f"text_{station}"]],.8,one=True,last=True)):
+                            result=[id+1,0]
+                            for i in range(8,0,-1):
+                                if len(self.device.locate_item([self.templates[f"level_{i}"]],.95,one=True,last=True)):
+                                    result=[id+1,i]
+                                    break
+                scanlist.append(result)
+        self.shaft=np.array(scanlist)
+        print(self.shaft)
+
+    def getShaftList(self,type):
+        shaft_list=self.shaft[:,0]
+        # print(f"shaftlist: {shaft_list}")
+        result=np.where(shaft_list==type,True,False)
+        # print(result)
+        return result.tolist()
+
+    def scan_tower(self):
+        self.tower=[]
+        scanlist=[]
+        stations=["crafting","smelting","chemistry","water_collector","greenhouse","jewel_crafting","trading","uranium_enrichment","nuclear_plant"]
+        images=[]
+        for i in range(1,9):
+            images.append(f"level_{i}")
+        for station in stations:
+            images.append(f"text_{station}")
+        images.extend(["main_up", "tower_down", "info"])
+        if self.checkTemplates(images) and self.move_home():
+            self.tap("main_up",2)
+            while(self.tap("tower_down")):
+                result=[0,0]
+                if len(self.device.locate_item([self.templates["info"]],.8,one=True)):
+                    for id,station in enumerate(stations):
+                        if len(self.device.locate_item([self.templates[f"text_{station}"]],.8,one=True,last=True)):
+                            result=[id+1,0]
+                            for i in range(8,0,-1):
+                                if len(self.device.locate_item([self.templates[f"level_{i}"]],.95,one=True,last=True)):
+                                    result=[id+1,i]
+                                    break
+                print(result)
+                scanlist.append(result)
+            print(scanlist)
+        self.tower=scanlist
 
     def explore(self):
         # self.logger.debug("Expedition")
@@ -348,88 +416,98 @@ class DeepTown(LabelFrame):
                         break
             self.move_home()
 
-    def collect(self):
-        images=["main_down", "mine_claim", "mine_up", "tower_down"]
+    def collect(self,type):
+        print("COLLECT")
+        images=["main_down", "mine_claim", "mine_up", "tower_down", "oil_claim"]
+        claim="mine_claim" if type==1 else "oil_claim"
         if self.checkTemplates(images) and self.move_home():
             self.tap("main_down",3)
-            if self.scanned.get("Collect",0)<time():
-                self.scanned['Collect']=time()+3*60*60
-                self.drilllist=[]
-                while (not self.tap("main_up")):
-                    self.tap("mine_up",1)
-                    val = True if self.tap("mine_claim",.1) else False
-                    self.drilllist.append(val)
-                    # self.logger.debug(val)
-            else:
-                location=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
-                if len(location):
-                    for collect in self.drilllist:
-                        self.device.tap(*location)
-                        sleep(.3)
-                        if collect and not self.tap("mine_claim",.1):
+            # if self.scanned.get("Collect",0)<time():
+            #     self.scanned['Collect']=time()+3*60*60
+            #     self.drilllist=[]
+            #     while (not self.tap("main_up")):
+            #         self.tap("mine_up",1)
+            #         val = True if self.tap("mine_claim",.1) else False
+            #         self.drilllist.append(val)
+            #         # self.logger.debug(val)
+            # else:
+            self.drilllist=clearEnd(self.getShaftList(type))
+            location=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
+            if len(location):
+                for collect in self.drilllist:
+                    self.device.tap(*location)
+                    sleep(.3)
+                    if collect:
+                        sleep(.4)
+                        if not self.tap(claim,.1,error=.7) and not self.reset_shaft:
                             print("resetting mines")
-                            self.scanned['Collect']=time()
-                    self.tap("surface")
-                    self.tap("main_up")
+                            self.plan_scan_shaft()
+                self.tap("surface")
+                self.tap("main_up")
             self.tap("tower_down")
             self.tap("mine_claim",.1)
             self.move_home()
 
-    def pump(self):
-        images=["main_down", "oil_claim", "mine_up"]
-        if self.checkTemplates(images) and self.move_home():
-            self.tap("main_down",3)
-            if self.scanned.get("Pump",0)<time():
-                print("scan pumps")
-                self.scanned['Pump']=time()+60*60*3
-                self.oillist=[]
-                while (not self.tap("main_up")):
-                    if not self.tap("mine_up"):
-                        break
-                    val = True if self.tap("oil_claim",.1) else False
-                    self.oillist.append(val)
-                for i in range(1,len(self.oillist)):
-                    if self.oillist[-i]:
-                        if i>1:
-                            self.oillist=self.oillist[0:-(i-1)]
-                        break
-            else:
-                print("start pumping")
-                location=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
-                if len(location):
-                    for collect in self.oillist:
-                        self.device.tap(*location)
-                        sleep(.3)
-                        if collect and not self.tap("oil_claim",.1):
-                            print("resetting oil")
-                            self.scanned['Pump']=time()
-            self.move_home()
+    # def pump(self):
+    #     images=["main_down", "oil_claim", "mine_up"]
+    #     if self.checkTemplates(images) and self.move_home():
+    #         self.tap("main_down",3)
+    #         if self.scanned.get("Pump",0)<time():
+    #             print("scan pumps")
+    #             self.scanned['Pump']=time()+60*60*3
+    #             self.oillist=[]
+    #             while (not self.tap("main_up")):
+    #                 if not self.tap("mine_up"):
+    #                     break
+    #                 val = True if self.tap("oil_claim",.1) else False
+    #                 self.oillist.append(val)
+    #             for i in range(1,len(self.oillist)):
+    #                 if self.oillist[-i]:
+    #                     if i>1:
+    #                         self.oillist=self.oillist[0:-(i-1)]
+    #                     break
+    #         else:
+    #             print("start pumping")
+    #             location=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
+    #             if len(location):
+    #                 for collect in self.oillist:
+    #                     self.device.tap(*location)
+    #                     sleep(.3)
+    #                     if collect and not self.tap("oil_claim",.1):
+    #                         print("resetting oil")
+    #                         self.scanned['Pump']=time()
+    #         self.move_home()
 
-    def boost(self):
+    def boost(self,type=2):
+        print("BOOST")
         images=["main_down", "mine_boost", "boost_play", "mine_up", "exit_boost"]
         if self.checkTemplates(images) and self.move_home():
-            self.tap("main_down",3)
-            if self.scanned.get("Boost",0)<time():
-                self.scanned['Boost']=time()+60*60*3
-                self.boostlist=[]
-                self.boosted=[]
-                while (not self.tap("main_up")):
-                    if not self.tap("mine_up"):
-                        break
-                    val = True if self.device.locate_item([self.templates["mine_boost"]],.8,one=True) else False
-                    self.boostlist.append(val)
-                    self.boosted.append(False)
-                self.move_home()
-                self.tap("main_down",3)
+            self.tap("main_down",2)
+            # if self.scanned.get("Boost",0)<time():
+            #     self.scanned['Boost']=time()+60*60*3
+            #     self.boostlist=[]
+            #
+            #     while (not self.tap("main_up")):
+            #         if not self.tap("mine_up"):
+            #             break
+            #         val = True if self.device.locate_item([self.templates["mine_boost"]],.8,one=True) else False
+            #         self.boostlist.append(val)
+            #         self.boosted.append(False)
+            #     self.move_home()
+            #     self.tap("main_down",3)
             count=0
+            self.boostlist=clearEnd(self.getShaftList(type))
+            if not len(self.boosted):
+                for i in range(len(self.boostlist)):
+                    self.boosted.append(False)
             location=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
             if len(location):
                 for idx,collect in enumerate(self.boostlist):
                     self.device.tap(*location)
                     sleep(.3)
                     if collect and not self.boosted[idx]:
-                        if not self.tap("mine_boost",.1):
-                            self.scanned['Boost']=time()
+                        if not self.tap("mine_boost",.1) and not self.reset_shaft:
+                            self.plan_scan_shaft()
                         self.boosted[idx]=True
                         playbutton=self.device.locate_item([self.templates["boost_play"]],.8,one=True)
                         if playbutton:
@@ -437,7 +515,7 @@ class DeepTown(LabelFrame):
                             count+=1
                             # sleep(2)
                         self.tap("exit_boost",.2)
-                    if count>=3:
+                    if count>=4:
                         break
                 else:
                     for i in range(len(self.boosted)):
@@ -450,16 +528,14 @@ class DeepTown(LabelFrame):
         if self.checkTemplates(images) and self.move_home():
             self.tap("main_up")
             button_dwn=self.device.locate_item([self.templates["tower_down"]],.8,one=True)
-            while len(button_dwn):
+            for station in self.tower:
                 self.device.tap(*button_dwn)
                 sleep(.3)
-                if self.tap("production_boost",.5,.6):
+                if station[0] in self.prod_boost_types and self.tap("production_boost",.5,.6):
                     playbutton=self.device.locate_item([self.templates["boost_play"]],.7,one=True)
                     if playbutton:
-                    # print("found play-button")
                         self.watchAd(playbutton,"exit_boost")
                     self.tap("exit_boost",.2)
-                button_dwn=self.device.locate_item([self.templates["tower_down"]],.8,one=True)
         self.move_home()
 
 
