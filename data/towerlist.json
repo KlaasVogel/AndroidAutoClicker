@@ -1,0 +1,11 @@
+{
+  "Crafting": {"image":"crafting", "boost":true},
+  "Smelting": {"image":"smelting", "boost":true},
+  "Chemistry": {"image":"chemistry", "boost":true},
+  "Water Collector": {"image":"water_collector", "boost":true},
+  "Greenhouse": {"image":"greenhouse", "boost":true},
+  "Jewel Crafting": {"image":"jewel_crafting", "boost":true},
+  "Trading": {"image":"trading", "boost":false},
+  "Uranium Enrichment": {"image":"uranium_enrichment", "boost":true},
+  "Nuclear Plant": {"image":"nuclear_plant", "boost":false}
+}

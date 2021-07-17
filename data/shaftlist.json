@@ -1,0 +1,5 @@
+{
+  "Mining Stations":{"image":"mining_station", "boost":1},
+  "Chemical Mining":{"image":"chemical_mining", "boost":1},
+  "Oil Pumps":{"image":"oil_pump", "boost":1}
+}
