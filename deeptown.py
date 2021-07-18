@@ -148,7 +148,7 @@ class Tasklist(dict):
     def setTask(self,task, firsttime=False):
         if task.time or firsttime:
             # self.log.debug(f'\n resetting job for {task.name}')
-            new_time=0 if firsttime else int(time())+task.time*60
+            new_time=int(time()) if firsttime else int(time())+task.time*60
             while new_time in self:
                 new_time+=1
             self[new_time]=task
@@ -278,8 +278,10 @@ class DeepTown(LabelFrame):
         # self.buttons['areas']={"btn":Button(frame, text="Areas")}
         # self.buttons['resources']={"btn":Button(frame, text="Resources")}
         self.buttons['running']={'btn':Button(frame, text="Start Tasks", command=self.start_tasks)}
-        self.buttons['collect']=self.build_label_button(frame,"Collect Ores", "collecting", "collect", lambda: self.collect(1),time=4)
-        self.buttons['pump']=self.build_label_button(frame,"Pump Oil", "collecting oil", "pump", lambda: self.collect(3),time=7)
+        self.buttons['request']=self.build_label_button(frame,"Request Seeds", "requesting", "request",lambda: self.request("Grape_Seed"),time=65)
+        self.buttons['claim']=self.build_label_button(frame,"Claim Seeds", "claiming", "claim",self.claim,time=65)
+        self.buttons['collect']=self.build_label_button(frame,"Collect Ores", "collecting", "collect",self.collect_ore,time=4)
+        self.buttons['pump']=self.build_label_button(frame,"Pump Oil", "collecting oil", "pump", self.collect_oil,time=4*60)
         self.buttons['boost']=self.build_label_button(frame,"Boost", "boosting", "boost", self.boost,time=2)
         self.buttons['boost_prod']=self.build_label_button(frame,"Boost Production", "boosting_production", "boost_prod", self.boost_product,time=2.5)
         self.buttons['cc']=self.build_label_button(frame,"Check Chests", "checking_chests", "cc", self.openChests,time=10)
@@ -295,6 +297,7 @@ class DeepTown(LabelFrame):
                 dict["btn"].grid(row=i, column=1, columnspan=2)
 
     def checkTemplates(self, list, templates=False):
+        print(f"checking: {list}")
         if not templates:
             templates=self.templates
         checklist=[]
@@ -302,6 +305,8 @@ class DeepTown(LabelFrame):
             if image not in templates:
                 checklist.append(image)
         if len(checklist):
+            print("not found:")
+            print(checklist)
             return False
         return True
 
@@ -325,10 +330,12 @@ class DeepTown(LabelFrame):
             self.tasklist.addTask(name, check, task, time)
 
 
-    def tap(self,name,wait=.5, error=.8):
+    def tap(self,name,wait=.5, error=.8, templates=False):
+        if not templates:
+            templates=self.templates
         # self.logger.debug(f"locating: {name}")
         try:
-            location=self.device.locate_item([self.templates[name]],error,one=True)
+            location=self.device.locate_item([templates[name]],error,one=True)
             if not location:
                 raise Exception(f"Image ({name}) not found on screen")
             self.device.tap(*location)
@@ -392,14 +399,14 @@ class DeepTown(LabelFrame):
             self.tap("main_down",2)
             while(self.tap("mine_up")):
                 result=[0,0]
-                if len(self.device.locate_item([self.templates["info"]],.8,one=True)):
-                    for id,station in enumerate(stations):
-                        if len(self.device.locate_item([self.templates[f"text_{station}"]],.8,one=True,last=True)):
-                            result=[id+1,0]
-                            for i in range(8,0,-1):
-                                if len(self.device.locate_item([self.templates[f"level_{i}"]],.95,one=True,last=True)):
-                                    result=[id+1,i]
-                                    break
+                # if len(self.device.locate_item([self.templates["info"]],.8,one=True)):
+                for id,station in enumerate(stations):
+                    if len(self.device.locate_item([self.templates[f"text_{station}"]],.8,one=True)):
+                        result=[id+1,0]
+                        for i in range(8,0,-1):
+                            if len(self.device.locate_item([self.templates[f"level_{i}"]],.95,one=True,last=True)):
+                                result=[id+1,i]
+                                break
                 scanlist.append(result)
         self.shaft=scanlist
         print(self.shaft)
@@ -441,27 +448,35 @@ class DeepTown(LabelFrame):
     def explore(self):
         # self.logger.debug("Expedition")
         images=["main_down", "mine_up", "expedition_next", "expedition_claim", "expedition_start"]
-        if self.checkTemplates(images) and self.move_home():
-            self.tap("main_down",3)
-            up_button=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
-            if len(up_button):
-                while (not self.tap("main_up")):
-                    check=False
-                    self.device.tap(*up_button)
-                    sleep(.5)
-                    while (self.tap("expedition_next")):
-                        # self.logger.debug("  --> next chapter")
-                        check=True
-                    if self.tap("expedition_claim",1):
-                        # self.logger.debug("claiming Price")
-                        check=True
-                        sleep(2)
-                    if self.tap("expedition_start",1):
-                        # self.logger.debug(" --> staring next exploration")
-                        check=True
-                    if check:
-                        break
-            self.move_home()
+        movelist=clearEnd(self.getShaftList([4]))
+        if len(movelist):
+            if self.checkTemplates(images) and self.move_home():
+                self.tap("main_down",3)
+                up_button=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
+                if len(up_button):
+                    for lvl in movelist:
+                        self.device.tap(*up_button)
+                        sleep(.3)
+                        if lvl:
+                            while (self.tap("expedition_next")):
+                                # self.logger.debug("  --> next chapter")
+                                check=True
+                            if self.tap("expedition_claim",1):
+                                # self.logger.debug("claiming Price")
+                                check=True
+                                sleep(2)
+                            if self.tap("expedition_start",1):
+                                # self.logger.debug(" --> staring next exploration")
+                                check=True
+                            if check:
+                                break
+                self.move_home()
+
+    def collect_ore(self):
+        self.collect(1)
+
+    def collect_oil(self):
+        self.collect(3)
 
     def collect(self,type):
         print("COLLECT")
@@ -597,10 +612,44 @@ class DeepTown(LabelFrame):
                         location=self.device.locate_item([self.templates[image]],.75,one=True)
                 self.tap("return")
 
-    def requestSeeds(self,request):
-        images=["menu_guild","request_big", "request_small"]
-        if self.checkTemplates(images) and self.checkTemplates[request, self.temp_req]:
+    def claim(self):
+        images=["menu_guild","chat","request_claim"]
+        if self.checkTemplates(images):
             self.move_home()
             self.restart_app()
             if self.tap("menu_guild"):
-                pass
+                self.tap("chat")
+                sleep(2)
+                for x in range(15):
+                    if self.tap("request_claim"):
+                        print("Whooot!")
+                    self.device.swipe(200,600,200,1200,speed=500)
+                    sleep(.5)
+                self.device.go_back()
+
+
+    def request(self,request):
+        images=["menu_guild","chat","request_big", "request_small"]
+        if self.checkTemplates(images) and self.checkTemplates([request], self.temp_req):
+            self.move_home()
+            self.restart_app()
+            if self.tap("menu_guild"):
+                self.tap("chat")
+                if self.tap("request_big"):
+                    count=0
+                    dcount=1
+                    x=557
+                    while not self.tap(request, templates=self.temp_req):
+                        y=[970,400] if count<6 else [400,970]
+                        self.device.swipe(x,y[0],x,y[1],speed=200)
+                        sleep(.7)
+                        count+=dcount
+                        if count >= 10:
+                            dcount=-1
+                        if count<0:
+                            print("could not find request")
+                            self.move_home()
+                            return
+                    self.tap("request_small")
+                    self.device.go_back()
+                    self.move_home()
