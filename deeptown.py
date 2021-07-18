@@ -18,6 +18,19 @@ def build_dir(map):
         mkdir(map)
     return path.join(getcwd(),map)
 
+def loadTemplates(map):
+    templates=DT_Images()
+    filelist=glob(path.join(map,"*.png"))
+    for file in filelist:
+        templates.addTemplate(file)
+    return templates
+
+class DT_Images(dict):
+    def addTemplate(self, fullpath):
+        name=getName(fullpath)
+        self[name]=Template(fullpath)
+
+
 def loadJSON(file):
     data=[]
     try:
@@ -99,11 +112,6 @@ class DT_Resources(dict):
         data=loadJSON(self.datafile)
         for resource in data:
             self[resource]=DT_Resource(resource,folder)
-
-class DT_Images(dict):
-    def addTemplate(self, fullpath):
-        name=getName(fullpath)
-        self[name]=Template(fullpath)
 
 @dataclass
 class Task():
@@ -239,7 +247,8 @@ class DeepTown(LabelFrame):
         self.buildOutput(self.frames[2])
         self.plan_scan_shaft()
         self.plan_scan_tower()
-        self.loadTemplates(build_dir("DT_images"))
+        self.templates=loadTemplates(build_dir("DT_images"))
+        self.temp_req=loadTemplates(build_dir(path.join("DT_images","requests")))
         self.prod_boost_types=[2,3,6]
 
     def buildOutput(self,frame):
@@ -257,12 +266,6 @@ class DeepTown(LabelFrame):
         for i in range(4):
             self.frames.append(Frame(self))
             self.frames[-1].grid(row=1, rowspan=10, column=i+1)
-
-    def loadTemplates(self, map):
-        self.templates=DT_Images()
-        filelist=glob(path.join(map,"*.png"))
-        for file in filelist:
-            self.templates.addTemplate(file)
 
     def build_label_button(self, frame, name, check, button, command, time=5):
         dict={"lbl": Label(frame, text=f"{name}:"),
@@ -291,15 +294,14 @@ class DeepTown(LabelFrame):
             else:
                 dict["btn"].grid(row=i, column=1, columnspan=2)
 
-    def checkTemplates(self, list):
+    def checkTemplates(self, list, templates=False):
+        if not templates:
+            templates=self.templates
         checklist=[]
         for image in list:
-            if image not in self.templates:
+            if image not in templates:
                 checklist.append(image)
         if len(checklist):
-            # self.logger.debug("need images:")
-            # self.logger.debug(checklist)
-            # self.logger.debug(self.templates)
             return False
         return True
 
@@ -537,7 +539,7 @@ class DeepTown(LabelFrame):
 
 
     def openChests(self):
-        images=["return","inventory","menu_chest","closed_chest_small","closed_chest_big","open_chest_big"]
+        images=["return","inventory","menu_chest","closed_chest_small","closed_chest_big","magnifier"]
         if self.checkTemplates(images):
             if self.move_home() and self.tap("inventory"):
                 self.tap("menu_chest")
@@ -546,8 +548,9 @@ class DeepTown(LabelFrame):
                 while location and count<10:
                     self.device.tap(*location)
                     sleep(.5)
-                    self.tap("closed_chest_big", 5)
-                    self.tap("open_chest_big")
+                    self.tap("closed_chest_big",.3)
+                    self.tap("magnifier",.3)
+                    self.tap("menu_chest",.3)
                     count+=1
                     location=self.device.locate_item([self.templates["closed_chest_small"]],.8,one=True)
                 self.tap("return")
@@ -593,3 +596,11 @@ class DeepTown(LabelFrame):
                         count+=1
                         location=self.device.locate_item([self.templates[image]],.75,one=True)
                 self.tap("return")
+
+    def requestSeeds(self,request):
+        images=["menu_guild","request_big", "request_small"]
+        if self.checkTemplates(images) and self.checkTemplates[request, self.temp_req]:
+            self.move_home()
+            self.restart_app()
+            if self.tap("menu_guild"):
+                pass
