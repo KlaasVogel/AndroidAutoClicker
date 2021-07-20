@@ -1,0 +1,13 @@
+{
+  "Collect Ores":{"time":4,"unit":"min","method":"collect_ore"},
+  "Collect Oil":{"time":4, "unit":"hour","method":"collect_oil"},
+  "Collect Water":{"time":10, "unit":"min","method":"collect_water"},
+  "Boost Mining":{"time":3, "unit":"min","method":"boost"},
+  "Boost Production":{"time":2.5, "unit":"min","method":"boost_prod"},
+  "Watch Ads":{"time":6, "unit":"min","method":"searchAds"},
+  "Open Chests":{"time":10, "unit":"min","method":"openChests"},
+  "Explore":{"time":61, "unit":"min","method":"explore"},
+  "Donate Items":{"time":20, "unit":"min","method":"donate"},
+  "Request Item":{"time":61, "unit":"min","method":"request"},
+  "Claim Items":{"time":30, "unit":"min","method":"claim"}
+}

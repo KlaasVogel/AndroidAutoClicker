@@ -7,7 +7,8 @@ from glob import glob
 from time import sleep
 from threading import Thread
 from logger import MyLogger, logging
-import json
+from json_tools import loadJSON, saveJSON
+from tasks import Tasks, Tasklist
 import traceback
 import random
 from time import time, localtime, strftime
@@ -29,24 +30,6 @@ class DT_Images(dict):
     def addTemplate(self, fullpath):
         name=getName(fullpath)
         self[name]=Template(fullpath)
-
-def loadJSON(file):
-    data=[]
-    try:
-        if path.isfile(file):
-            with open(file) as json_file:
-                data = json.load(json_file)
-    except Exception as e:
-        traceback.print_exc()
-    finally:
-        return data
-
-def saveJSON(data, file):
-    try:
-        with open(file, 'w') as outfile:
-            json.dump(data, outfile, indent=2)
-    except Exception as e:
-        traceback.print_exc()
 
 def getName(file):
     filename=f"{path.splitext(path.split(file)[1])[0]}"
@@ -90,111 +73,39 @@ def clearEnd(list):
             break
     return list
 
-@dataclass
-class DT_Resource():
-    name: str
-    folder: str = field(repr=False)
-    image: str = field(init=False)
-    templateS: Template = field(init=False)
-    templateL: Template = field(init=False)
-    def __post_init__(self):
-        filelist=glob(path.join(self.folder,"*_big*.png"))
-        file=findFile(name, filelist)
-        if file:
-            self.image=file
-            self.templateL=Template(file)
-        filelist=glob(path.join(self.folder,"*_small*.png"))
-        file=findFile(name, filelist)
-        if file:
-            self.templateS=Template(file)
-        # self.logger.debug(self)
+# @dataclass
+# class DT_Resource():
+#     name: str
+#     folder: str = field(repr=False)
+#     image: str = field(init=False)
+#     templateS: Template = field(init=False)
+#     templateL: Template = field(init=False)
+#     def __post_init__(self):
+#         filelist=glob(path.join(self.folder,"*_big*.png"))
+#         file=findFile(name, filelist)
+#         if file:
+#             self.image=file
+#             self.templateL=Template(file)
+#         filelist=glob(path.join(self.folder,"*_small*.png"))
+#         file=findFile(name, filelist)
+#         if file:
+#             self.templateS=Template(file)
+#         # self.logger.debug(self)
+#
+# class DT_Resources(dict):
+#     def __init__(self):
+#         folder=build_dir("resources")
+#         self.datafile=path.join(folder, "list.json")
+#         data=loadJSON(self.datafile)
+#         for resource in data:
+#             self[resource]=DT_Resource(resource,folder)
 
-class DT_Resources(dict):
-    def __init__(self):
-        folder=build_dir("resources")
-        self.datafile=path.join(folder, "list.json")
-        data=loadJSON(self.datafile)
-        for resource in data:
-            self[resource]=DT_Resource(resource,folder)
 
-@dataclass
-class Task():
-    name: str
-    check: str
-    job: str = field(repr=False)
-    time: float
 
-class Tasklist(dict):
-    def __init__(self,parent,output1, output2, output3):
-        self.parent=parent
-        self.log=parent.logger
-        self.listOutput=output1
-        self.taskOutput=output2
-        self.console=output3
-        self.paused=True
-        self.busy=False
-        self.lasttask=None
-        self.update()
 
-    def start(self):
-        self.paused=False
-        self.thread=Thread(target=self.run, daemon=True).start()
-    def pause(self):
-        self.paused=True
 
-    def addTask(self, name, check, job, waittime):
-        # self.log.debug(f'\n adding job for {name}')
-        task=Task(name, check, job, waittime)
-        self.setTask(task, True)
-        if not hasattr(self.parent, check):
-            setattr(self.parent, check, True)
 
-    def setTask(self,task, firsttime=False):
-        if task.time or firsttime:
-            # self.log.debug(f'\n resetting job for {task.name}')
-            new_time=int(time()) if firsttime else int(time())+task.time*60
-            while new_time in self:
-                new_time+=1
-            self[new_time]=task
 
-    def run(self):
-        print(self)
-        while not self.paused:
-            cur_time=int(time())
-            if len(self):
-                firsttask=sorted(self)[0]
-                if firsttask<=cur_time and not self.busy:
-                    self.parent.behind=True if cur_time-firsttask>20 else False
-                    task=self.pop(firsttask)
-                    self.taskOutput.set(f"Current Task: {task.name} [started at {strftime('%H:%M:%S',localtime())}]")
-                    if getattr(self.parent, task.check):
-                        self.busy=True
-                        task.job()
-                        self.busy=False
-                        self.setTask(task)
-            sleep(1)
-
-    def getData(self):
-        data=[]
-        timelist=sorted(self)
-        cur_time=int(time())
-        # data.append(strftime("%H:%M:%S",localtime()))
-        for tasktime in timelist:
-            remaining_time=tasktime-cur_time
-            task=self[tasktime]
-            data.append(f"{task.name} in {printtime(remaining_time)}")
-        return data
-
-    def update(self):
-        try:
-            data=self.getData()
-            self.listOutput.delete("1.0","end")
-            for line in data:
-                self.listOutput.insert("end",str(line)+"\n")
-        except Exception as e:
-            traceback.print_exc()
-        finally:
-            self.parent.after(1000, self.update)
 
 @dataclass
 class Station():
@@ -216,8 +127,8 @@ class Stations(dict):
     def add(self, image, name, boostable=True):
         self[image]=Station(name, boostable)
 
-class Boosts(LabelFrame,**kwargs):
-    def __init__(self, parent):
+class Boosts(LabelFrame):
+    def __init__(self, parent, ,**kwargs):
         LabelFrame.__init__(self,parent, text="Boosts:")
         self.grid(**kwargs)
         self.tower_name_list=Stations(loadJSON(path.join("data","towerlist.json")))
@@ -240,20 +151,21 @@ class Boosts(LabelFrame,**kwargs):
         print(f"get {item}: {result}")
         return result
 
+
 class DeepTown(LabelFrame):
     def __init__(self, parent, device):
         self.logger=MyLogger('DeepTown', LOG_LEVEL=logging.DEBUG)
         self.parent=parent
         self.device=device
         LabelFrame.__init__(self, parent, text="Deep Town")
-        self.buildFrames()
-        self.buildButtons(self.frames[0])
-        self.boosts=Boosts(self.frames[1])
-        self.buildOutput(self.frames[2])
-        self.loaddata()
-        self.templates=loadTemplates(build_dir("DT_images"))
-        self.temp_req=loadTemplates(build_dir(path.join("DT_images","requests")))
-        self.behind=False
+        # self.buttons=Buttons(self,row=1,column=1,sticky='nw')
+        self.requests=Request(self,row=1,column=3, sticky='n')
+        # self.boosts=Boosts(self,row=2,column=3,sticky='nw')
+        self.tasklist=Tasklist(self,row=3,column=1,columnspan=3)
+        self.tasks=Tasks(self, self.tasklist, row=2, column=1, columnspan=2)
+        # self.loaddata()
+        # self.templates=loadTemplates(build_dir("DT_images"))
+        # self.temp_req=loadTemplates(build_dir(path.join("DT_images","requests")))
 
     def buildOutput(self,parent,**kwargs):
         self.textList=Text(frame,height=7)
@@ -280,17 +192,8 @@ class DeepTown(LabelFrame):
         self.buttons={}
         self.buttons['prntscr']={"btn":Button(frame, text="Print Screen", command=self.device.printScreen)}
         # self.buttons['areas']={"btn":Button(frame, text="Areas")}
-        # self.buttons['resources']={"btn":Button(frame, text="Resources")}
-        self.buttons['running']={'btn':Button(frame, text="Start Tasks", command=self.start_tasks)}
-        self.buttons['request']=self.build_label_button(frame,"Request Seeds", "requesting", "request",lambda: self.request("Grape_Seed"),time=61)
-        self.buttons['claim']=self.build_label_button(frame,"Claim Seeds", "claiming", "claim",self.claim,time=65)
-        self.buttons['collect']=self.build_label_button(frame,"Collect Ores", "collecting", "collect",self.collect_ore,time=4)
-        self.buttons['pump']=self.build_label_button(frame,"Pump Oil", "collecting oil", "pump", self.collect_oil,time=4*60)
-        self.buttons['boost']=self.build_label_button(frame,"Boost", "boosting", "boost", self.boost,time=2)
-        self.buttons['boost_prod']=self.build_label_button(frame,"Boost Production", "boosting_production", "boost_prod", self.boost_product,time=2.5)
-        self.buttons['cc']=self.build_label_button(frame,"Check Chests", "checking_chests", "cc", self.openChests,time=10)
-        self.buttons['ca']=self.build_label_button(frame,"Check Ads", "checking_ads","ca",self.searchAds,time=6.01)
-        self.buttons['explore']=self.build_label_button(frame,"Explore", "exploring", "explore", self.explore,time=60.1)
+            # self.buttons['resources']={"btn":Button(frame, text="Resources")}
+            self.buttons['running']={'btn':Button(frame, text="Start Tasks", command=self.start_tasks)}
         i = 1
         for dict in self.buttons.values():
             i+=1
