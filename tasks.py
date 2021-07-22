@@ -1,17 +1,19 @@
 from tkinter import Tk, IntVar, StringVar, Label, Text
-from tkinter.ttk import Frame, LabelFrame, Button, Checkbutton, Entry
+from tkinter.ttk import Frame, LabelFrame, Button, Checkbutton, Entry, OptionMenu
 from dataclasses import dataclass, field
 from os import path, getcwd, mkdir
 from json_tools import loadJSON, saveJSON
+from tools import printtime
+import traceback
+from time import time, sleep, localtime, strftime
+from threading import Thread
 
-@dataclass
-class Task():
-    name: str
-    check: str
-    job: str = field(repr=False)
-    time: float
-
-
+# @dataclass
+# class Task():
+#     name: str
+#     check: str
+#     job: str = field(repr=False)
+#     time: float
 
 
 class Tasklist(dict):
@@ -21,18 +23,15 @@ class Tasklist(dict):
         self.parent.behind=False
         self.frame=LabelFrame(self.parent, text="Taskslist:")
         self.frame.grid(**kwargs)
-        self.textList=Text(frame,height=7)
+        self.textList=Text(self.frame,height=7)
         self.stringTask=StringVar()
-        self.labelTask=Label(frame, textvariable=self.stringTask)
+        self.labelTask=Label(self.frame, textvariable=self.stringTask)
         # self.textConsole=Text(frame,height=7)
         self.textList.grid(row=2, column=1)
         self.labelTask.grid(row=1, column=1, sticky='w')
         # self.textConsole.grid(row=3, column=1)
-        self.tasklist=Tasklist(self,self.textList,self.stringTask,self.textConsole)
-
-        self.listOutput=output1
-        self.taskOutput=output2
-        self.console=output3
+        # self.tasklist=Tasklist(self,self.textList,self.stringTask,self.textConsole)
+        # self.console=output3
         self.paused=True
         self.busy=False
         self.lasttask=None
@@ -44,20 +43,25 @@ class Tasklist(dict):
     def pause(self):
         self.paused=True
 
-    def addTask(self, name, check, job, waittime):
-        # self.log.debug(f'\n adding job for {name}')
-        task=Task(name, check, job, waittime)
+    def addTask(self, task):
         self.setTask(task, True)
-        if not hasattr(self.parent, check):
-            setattr(self.parent, check, True)
 
     def setTask(self,task, firsttime=False):
-        if task.time or firsttime:
+        if task.time.get() or firsttime:
             # self.log.debug(f'\n resetting job for {task.name}')
-            new_time=int(time()) if firsttime else int(time())+task.time*60
+            multiplier = 3600 if task.unit.get()=="hour" else 60
+            new_time=int(time()) if firsttime else int(time())+task.time.get()*multiplier
             while new_time in self:
                 new_time+=1
             self[new_time]=task
+
+    def removeTask(self, task):
+        name=""
+        for tasktime in self:
+            if self[tasktime]==task:
+                name=tasktime
+        if name:
+            self.pop(name)
 
     def run(self):
         print(self)
@@ -68,8 +72,8 @@ class Tasklist(dict):
                 if firsttask<=cur_time and not self.busy:
                     self.parent.behind=True if cur_time-firsttask>20 else False
                     task=self.pop(firsttask)
-                    self.taskOutput.set(f"Current Task: {task.name} [started at {strftime('%H:%M:%S',localtime())}]")
-                    if getattr(self.parent, task.check):
+                    self.stringTask.set(f"Current Task: {task.name} [started at {strftime('%H:%M:%S',localtime())}]")
+                    if task.status.get():
                         self.busy=True
                         task.job()
                         self.busy=False
@@ -90,38 +94,98 @@ class Tasklist(dict):
     def update(self):
         try:
             data=self.getData()
-            self.listOutput.delete("1.0","end")
+            self.textList.delete("1.0","end")
             for line in data:
-                self.listOutput.insert("end",str(line)+"\n")
+                self.textList.insert("end",str(line)+"\n")
         except Exception as e:
             traceback.print_exc()
         finally:
             self.parent.after(1000, self.update)
 
 
+class TempGet():
+    def get(self):
+        return True
+
+class TempTime():
+    def get(self):
+        return 0
+
 @dataclass
-class TaskField():
+class TempTask():
+    name: str
+    job: str
+    def __post_init__(self):
+        self.time=TempTime()
+        self.unit=TempTime()
+        self.status=TempGet()
+
+
+@dataclass
+class Task():
     parent: str
     row: int
     name: str
-    time: int
+    time: float
     unit: str
     method: str
+    status: int
     def __post_init__(self):
-        print(self)
+        status=self.status
+        self.status=IntVar(name=self.name)
+        self.status.set(status)
+        self.job=getattr(self.parent.master,self.method,self.emptymethod)
+        time=self.time
+        self.time=IntVar()
+        self.timeBox=Entry(self.parent,textvariable=self.time,width=3)
+        self.timeBox.grid(column=2, row=self.row)
+        self.time.set(time)
+        unit=self.unit
+        self.unit=StringVar()
+        self.menu=OptionMenu(self.parent,self.unit,*["min","hour"])
+        self.menu.grid(row=self.row, column=3, sticky='w')
+        self.unit.set(unit)
+        if status:
+            self.parent.tasklist.addTask(self)
+        self.status.trace_add('write', self.toggle)
+        self.button=Checkbutton(self.parent, text=self.name, variable=self.status, onvalue=1)
+        self.button.grid(column=1, row=self.row, sticky='w')
+
+    def toggle(self,*args):
+        print(args)
+        self.parent.tasklist.removeTask(self)
+        if self.status.get():
+            self.parent.tasklist.addTask(self)
+
+    def emptymethod(self):
+        print("doing nothing")
 
 class Tasks(LabelFrame):
-    def __init__(self, parent, **kwargs):
-        self.parent=parent
+    def __init__(self, parent, tasklist, **kwargs):
+        self.master=parent
+        self.tasklist=tasklist
         LabelFrame.__init__(self, parent, text="Tasks:")
         self.fields=[]
         self.grid(**kwargs)
-        self.build(loadJSON(path.join("data","tasks.json")))
+        self.json_file=path.join("data","tasks.json")
+        self.print_button=Button(self, text="Print Screen", command=parent.device.printScreen)
+        self.print_button.grid(row=0, column=1)
+        self.start_button=Button(self, text="Start Tasks", command=self.start_tasks)
+        self.start_button.grid(column=2, columnspan=2, row=0)
+        self.build(loadJSON(self.json_file))
+
+    def start_tasks(self):
+        if self.tasklist.paused:
+            self.start_button.configure(text="Pause")
+            self.tasklist.start()
+        else:
+            self.start_button.configure(text="Start Tasks")
+            self.tasklist.pause()
 
     def build(self, data):
         print(data)
         for idx, name in enumerate(data.keys()):
             try:
-                self.fields.append(TaskField(self, idx, name, data[name]))
+                self.fields.append(Task(self, idx+1, name, **data[name]))
             except:
                 traceback.print_exc()

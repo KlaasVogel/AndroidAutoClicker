@@ -1,4 +1,6 @@
 import json
+from os import path
+import traceback
 
 def loadJSON(file):
     data=[]
@@ -6,7 +8,10 @@ def loadJSON(file):
         if path.isfile(file):
             with open(file) as json_file:
                 data = json.load(json_file)
+        else:
+            raise Exception(f"file not found: {file}")
     except Exception as e:
+        print(e)
         traceback.print_exc()
     finally:
         return data

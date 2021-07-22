@@ -1,14 +1,13 @@
 from tkinter import Tk, IntVar, StringVar, Label, Text
-from tkinter.ttk import Frame, LabelFrame, Button, Checkbutton, Entry
+from tkinter.ttk import Frame, LabelFrame, Button, Checkbutton, Entry, OptionMenu
 from dataclasses import dataclass, field
 from os import path, getcwd, mkdir
 from adb import Template
 from glob import glob
 from time import sleep
-from threading import Thread
 from logger import MyLogger, logging
 from json_tools import loadJSON, saveJSON
-from tasks import Tasks, Tasklist
+from tasks import Tasks, Tasklist, TempTask
 import traceback
 import random
 from time import time, localtime, strftime
@@ -46,27 +45,8 @@ def findFile(name, filelist):
     else:
         return False
 
-def printtime(seconds):
-    if seconds <= 60:
-        return f"{int(seconds)} seconds"
-    if seconds <= 60*60:
-        min=int(seconds/60)
-        sec=int(seconds%60)
-        return f"{min} minute(s) and {sec} seconds"
-    hour=int(seconds/3600)
-    min=int((seconds%3600)/60)
-    sec=int(seconds%60)
-    text=f"{hour} hour(s)"
-    sep=", " if (min and sec) else " and "
-    text=text+sep
-    if min:
-        text=text+f"{min} minute(s)"
-    if sec:
-        text=text+f" and {sec} seconds"
-    return text
-
 def clearEnd(list):
-    for i in range(1,len(list)):
+    for i in range(1,len(list)+1):
         if list[-i]:
             if i>1:
                 list=list[0:-(i-1)]
@@ -101,12 +81,6 @@ def clearEnd(list):
 #             self[resource]=DT_Resource(resource,folder)
 
 
-
-
-
-
-
-
 @dataclass
 class Station():
     name: str
@@ -128,7 +102,7 @@ class Stations(dict):
         self[image]=Station(name, boostable)
 
 class Boosts(LabelFrame):
-    def __init__(self, parent, ,**kwargs):
+    def __init__(self, parent, **kwargs):
         LabelFrame.__init__(self,parent, text="Boosts:")
         self.grid(**kwargs)
         self.tower_name_list=Stations(loadJSON(path.join("data","towerlist.json")))
@@ -151,6 +125,17 @@ class Boosts(LabelFrame):
         print(f"get {item}: {result}")
         return result
 
+class Request(LabelFrame):
+    def __init__(self, parent, **kwargs):
+        LabelFrame.__init__(self, parent, text="Request:")
+        self.grid(**kwargs)
+        self.label=Label(self,text="Request Item:")
+        self.label.grid(row=0,column=0)
+        self.choosen=StringVar()
+        options=parent.temp_req.keys()
+        self.menu=OptionMenu(self,self.choosen,*options)
+        self.menu.grid(row=0, column=1)
+
 
 class DeepTown(LabelFrame):
     def __init__(self, parent, device):
@@ -159,41 +144,41 @@ class DeepTown(LabelFrame):
         self.device=device
         LabelFrame.__init__(self, parent, text="Deep Town")
         # self.buttons=Buttons(self,row=1,column=1,sticky='nw')
-        self.requests=Request(self,row=1,column=3, sticky='n')
-        # self.boosts=Boosts(self,row=2,column=3,sticky='nw')
-        self.tasklist=Tasklist(self,row=3,column=1,columnspan=3)
-        self.tasks=Tasks(self, self.tasklist, row=2, column=1, columnspan=2)
-        # self.loaddata()
-        # self.templates=loadTemplates(build_dir("DT_images"))
-        # self.temp_req=loadTemplates(build_dir(path.join("DT_images","requests")))
+        self.boosts=Boosts(self,row=2,column=3,sticky='nw')
+        self.tasklist=Tasklist(self,row=6,column=1,columnspan=3, sticky='w')
+        self.loaddata()
+        self.tasks=Tasks(self, self.tasklist, row=1, column=1, rowspan=5,columnspan=2, sticky='w')
+        self.templates=loadTemplates(build_dir("DT_images"))
+        self.temp_req=loadTemplates(build_dir(path.join("DT_images","requests")))
+        self.requests=Request(self,row=1,column=3, sticky='nw')
 
-    def buildOutput(self,parent,**kwargs):
-        self.textList=Text(frame,height=7)
-        self.stringTask=StringVar()
-        self.labelTask=Label(frame, textvariable=self.stringTask)
-        self.textConsole=Text(frame,height=7)
-        self.textList.grid(row=2, column=1)
-        self.labelTask.grid(row=1, column=1, sticky='w')
-        self.textConsole.grid(row=3, column=1)
-        self.tasklist=Tasklist(self,self.textList,self.stringTask,self.textConsole)
+    # def buildOutput(self,parent,**kwargs):
+    #     self.textList=Text(frame,height=7)
+    #     self.stringTask=StringVar()
+    #     self.labelTask=Label(frame, textvariable=self.stringTask)
+    #     self.textConsole=Text(frame,height=7)
+    #     self.textList.grid(row=2, column=1)
+    #     self.labelTask.grid(row=1, column=1, sticky='w')
+    #     self.textConsole.grid(row=3, column=1)
+    #     self.tasklist=Tasklist(self,self.textList,self.stringTask,self.textConsole)
 
-    def buildFrames(self):
-        self.frames=[]
-        for i in range(4):
-            self.frames.append(Frame(self))
-            self.frames[-1].grid(row=1, rowspan=10, column=i+1)
+    # def buildFrames(self):
+    #     self.frames=[]
+    #     for i in range(4):
+    #         self.frames.append(Frame(self))
+    #         self.frames[-1].grid(row=1, rowspan=10, column=i+1)
 
-    def build_label_button(self, frame, name, check, button, command, time=5):
-        dict={"lbl": Label(frame, text=f"{name}:"),
-              "btn": Button(frame, text="Start", command=lambda: self.trigger(name,check,button,command,time))}
-        return dict
+    # def build_label_button(self, frame, name, check, button, command, time=5):
+    #     dict={"lbl": Label(frame, text=f"{name}:"),
+    #           "btn": Button(frame, text="Start", command=lambda: self.trigger(name,check,button,command,time))}
+    #     return dict
 
     def buildButtons(self,frame):
         self.buttons={}
         self.buttons['prntscr']={"btn":Button(frame, text="Print Screen", command=self.device.printScreen)}
         # self.buttons['areas']={"btn":Button(frame, text="Areas")}
             # self.buttons['resources']={"btn":Button(frame, text="Resources")}
-            self.buttons['running']={'btn':Button(frame, text="Start Tasks", command=self.start_tasks)}
+
         i = 1
         for dict in self.buttons.values():
             i+=1
@@ -217,13 +202,7 @@ class DeepTown(LabelFrame):
             return False
         return True
 
-    def start_tasks(self):
-        if self.tasklist.paused:
-            self.buttons['running']["btn"].configure(text="Pause")
-            self.tasklist.start()
-        else:
-            self.buttons['running']["btn"].configure(text="Start Tasks")
-            self.tasklist.pause()
+
 
     def trigger(self, name, check, button, task, time):
         if not hasattr(self, check):
@@ -292,11 +271,11 @@ class DeepTown(LabelFrame):
             self.plan_scan_tower()
 
     def plan_scan_shaft(self):
-        self.tasklist.addTask('Scan Mineshaft', 'scanning shaft', self.scan_shaft, 0)
+        self.tasklist.addTask(TempTask('Scan Mineshaft',self.scan_shaft))
         self.reset_shaft=True
 
     def plan_scan_tower(self):
-        self.tasklist.addTask('Scan Tower', 'scanning tower', self.scan_tower, 0)
+        self.tasklist.addTask(TempTask('Scan Tower',self.scan_tower))
         self.reset_tower=True
 
     def scan_shaft(self):
@@ -333,6 +312,13 @@ class DeepTown(LabelFrame):
         result=[]
         for type,lvl in self.shaft:
             result.append(1) if type in types else result.append(0)
+        return result
+
+    def getTowerList(self, types):
+        result=[]
+        print(self.tower)
+        for type,lvl in self.tower:
+            result.append(1) if type in types else result.append(0)
         print(result)
         return result
 
@@ -363,6 +349,16 @@ class DeepTown(LabelFrame):
             print(scanlist)
         saveJSON(scanlist,path.join("data","towerdata.json"))
         self.tower=scanlist
+
+    def getTowerType(self, name):
+        type=0
+        list=self.boosts.tower_name_list.values()
+        print(list)
+        for idx,item in enumerate(list):
+            if item.name==name:
+                type=idx+1
+        print(type)
+        return type
 
     def explore(self):
         # self.logger.debug("Expedition")
@@ -397,6 +393,27 @@ class DeepTown(LabelFrame):
     def collect_oil(self):
         self.collect(3)
 
+    def collect_water(self):
+        print("COLLECT WATER")
+        images=["tower_down", "mine_claim", "main_up"]
+        type=self.getTowerType("Water Collector")
+        if type:
+            prodlist=clearEnd(self.getTowerList([type]))
+            print(prodlist)
+            if self.checkTemplates(images) and self.move_home():
+                self.tap("main_up")
+                button_dwn=self.device.locate_item([self.templates["tower_down"]],.8,one=True)
+                for collect in prodlist:
+                    self.device.tap(*button_dwn)
+                    sleep(.3)
+                    if collect:
+                        sleep(.4)
+                        if not self.tap("mine_claim",.1,error=.7):
+                            print("resetting tower")
+                            self.plan_scan_tower()
+                            break
+                self.move_home()
+
     def collect(self,type):
         print("COLLECT")
         images=["main_down", "mine_claim", "mine_up", "tower_down", "oil_claim"]
@@ -416,9 +433,9 @@ class DeepTown(LabelFrame):
                             self.plan_scan_shaft()
                             break
                 self.tap("surface")
-                self.tap("main_up")
-            self.tap("tower_down")
-            self.tap("mine_claim",.1)
+                # self.tap("main_up")
+            # self.tap("tower_down")
+            # self.tap("mine_claim",.1)
             self.move_home()
 
     def boost(self):
@@ -426,21 +443,22 @@ class DeepTown(LabelFrame):
         images=["main_down", "mine_boost", "boost_play", "mine_up", "exit_boost"]
         boostlist=self.boosts.get("shaft")
         max=1 if self.behind else 4
-        if self.checkTemplates(images) and self.move_home():
+        if len(boostlist) and self.checkTemplates(images) and self.move_home():
             self.tap("main_down",2)
             count=0
             shaftlist=clearEnd(self.getShaftList(boostlist))
             if not hasattr(self, "boosted"):
                 self.boosted=[]
-            if not len(self.boosted):
+            if len(self.boosted)!=len(shaftlist):
                 for i in range(len(shaftlist)):
                     self.boosted.append(False)
             location=self.device.locate_item([self.templates["mine_up"]],.8,one=True)
             if len(location):
                 for idx,collect in enumerate(shaftlist):
                     self.device.tap(*location)
-                    sleep(.3)
-                    if collect and idx in self.boosted and not self.boosted[idx]:
+                    sleep(.2)
+                    if collect and not self.boosted[idx]:
+                        sleep(.3)
                         if not self.tap("mine_boost",.1):
                             self.plan_scan_shaft()
                             break
@@ -465,22 +483,26 @@ class DeepTown(LabelFrame):
             button_dwn=self.device.locate_item([self.templates["tower_down"]],.8,one=True)
             for type,lvl in self.tower:
                 self.device.tap(*button_dwn)
-                sleep(.3)
+                sleep(.2)
                 print(type, lvl)
                 if type in boostlist:
-                    if not self.tap("production_boost",.5,.6):
+                    sleep(.3)
+                    if not self.tap("production_boost",.5,.5):
+                        print("could not find boostbutton")
+                        sleep(1)
                         self.plan_scan_tower()
                         break
                     playbutton=self.device.locate_item([self.templates["boost_play"]],.7,one=True)
                     if playbutton:
                         self.watchAd(playbutton,"exit_boost")
-                    self.tap("exit_boost",.2)
+                    while(self.tap("exit_boost",.3)):
+                        print("closing menu's")
         self.move_home()
 
 
     def openChests(self):
         images=["return","inventory","menu_chest","closed_chest_small","closed_chest_big","magnifier"]
-        max=1 if self.behind else 10
+        max=3 if self.behind else 10
         if self.checkTemplates(images):
             if self.move_home() and self.tap("inventory"):
                 self.tap("menu_chest")
@@ -547,7 +569,7 @@ class DeepTown(LabelFrame):
             if self.tap("menu_guild"):
                 self.tap("chat")
                 sleep(2)
-                for x in range(15):
+                for x in range(5):
                     if self.tap("request_claim"):
                         print("Whooot!")
                     self.device.swipe(200,600,200,1200,speed=500)
@@ -555,9 +577,11 @@ class DeepTown(LabelFrame):
                 self.device.go_back()
 
 
-    def request(self,request):
+    def request(self):
         images=["menu_guild","chat","request_big", "request_small"]
-        if self.checkTemplates(images) and self.checkTemplates([request], self.temp_req):
+        request=self.requests.choosen.get()
+        print(f"Requesting: {request}")
+        if request and self.checkTemplates(images) and self.checkTemplates([request], self.temp_req):
             self.move_home()
             self.restart_app()
             if self.tap("menu_guild"):

@@ -15,13 +15,16 @@ class MainApp(Tk):
     def __init__(self):
         self.root = Tk.__init__(self)
         self.device=Adb_Device()
-        self.frame=EmptyFrame(self)
-        self.frame.grid(row=2, column=1)
+        # self.frame=EmptyFrame(self)
+        # self.frame.grid(row=2, column=1)
         self.games=["Geen","Crafting", "Deep Town"]
         self.option=StringVar(name="game")
         self.option.set(self.games[0])
         self.dropdown = OptionMenu(self, self.option, self.games[0], *self.games, command=self.display_selected)
-        self.dropdown.grid(row=1, column=1, columnspan=3)
+        # self.dropdown.grid(row=1, column=1, columnspan=3)
+        self.frame=DeepTown(self,self.device)
+        self.frame.grid(row=2, column=1)
+
 
     def display_selected(self, option):
         print(option)
