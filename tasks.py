@@ -140,11 +140,13 @@ class Task():
         self.timeBox=Entry(self.parent,textvariable=self.time,width=3)
         self.timeBox.grid(column=2, row=self.row)
         self.time.set(time)
+        self.time.trace_add('write', self.parent.save)
         unit=self.unit
         self.unit=StringVar()
         self.menu=OptionMenu(self.parent,self.unit,*["min","hour"])
         self.menu.grid(row=self.row, column=3, sticky='w')
         self.unit.set(unit)
+        self.unit.trace_add('write', self.parent.save)
         if status:
             self.parent.tasklist.addTask(self)
         self.status.trace_add('write', self.toggle)
@@ -156,9 +158,22 @@ class Task():
         self.parent.tasklist.removeTask(self)
         if self.status.get():
             self.parent.tasklist.addTask(self)
+        self.parent.save()
 
     def emptymethod(self):
         print("doing nothing")
+
+    def get(self):
+        try:
+            time=self.time.get()
+        except:
+            time=0
+        data={ "time":time,
+               "unit":self.unit.get(),
+               "method":self.method,
+               "status":self.status.get()
+             }
+        return [self.name,data]
 
 class Tasks(LabelFrame):
     def __init__(self, parent, tasklist, **kwargs):
@@ -189,3 +204,10 @@ class Tasks(LabelFrame):
                 self.fields.append(Task(self, idx+1, name, **data[name]))
             except:
                 traceback.print_exc()
+
+    def save(self,*args):
+        alldata={}
+        for task in self.fields:
+            name,data=task.get()
+            alldata[name]=data
+        saveJSON(alldata,self.json_file)

@@ -53,34 +53,6 @@ def clearEnd(list):
             break
     return list
 
-# @dataclass
-# class DT_Resource():
-#     name: str
-#     folder: str = field(repr=False)
-#     image: str = field(init=False)
-#     templateS: Template = field(init=False)
-#     templateL: Template = field(init=False)
-#     def __post_init__(self):
-#         filelist=glob(path.join(self.folder,"*_big*.png"))
-#         file=findFile(name, filelist)
-#         if file:
-#             self.image=file
-#             self.templateL=Template(file)
-#         filelist=glob(path.join(self.folder,"*_small*.png"))
-#         file=findFile(name, filelist)
-#         if file:
-#             self.templateS=Template(file)
-#         # self.logger.debug(self)
-#
-# class DT_Resources(dict):
-#     def __init__(self):
-#         folder=build_dir("resources")
-#         self.datafile=path.join(folder, "list.json")
-#         data=loadJSON(self.datafile)
-#         for resource in data:
-#             self[resource]=DT_Resource(resource,folder)
-
-
 @dataclass
 class Station():
     name: str
@@ -101,23 +73,28 @@ class Stations(dict):
     def add(self, image, name, boostable=True):
         self[image]=Station(name, boostable)
 
+
 class Boosts(LabelFrame):
     def __init__(self, parent, **kwargs):
         LabelFrame.__init__(self,parent, text="Boosts:")
         self.grid(**kwargs)
-        self.tower_name_list=Stations(loadJSON(path.join("data","towerlist.json")))
-        self.shaft_name_list=Stations(loadJSON(path.join("data","shaftlist.json")))
+        self.parent=parent
+        self.json_file=path.join("data","boosts.json")
+        boostlist=loadJSON(self.json_file)
         self.items=[]
-        for name,list in {"Tower:":self.tower_name_list, "Shaft:":self.shaft_name_list}.items():
+        for name,list in {"Tower:":parent.tower_stations, "Shaft:":parent.shaft_stations}.items():
             self.items.append(Label(self, text=name))
             for station in list.values():
                 if station.boostable:
                     self.items.append(Checkbutton(self, text=station.name, variable=station.boost, onvalue=1))
+                    if station.name in boostlist and boostlist[station.name]:
+                        station.boost.set(1)
+                    station.boost.trace_add('write',self.save)
         for idx,item in enumerate(self.items):
             item.grid(row=idx+1,column=1, sticky='w')
 
     def get(self, item):
-        list=self.shaft_name_list if item=="shaft" else self.tower_name_list
+        list=self.parent.shaft_stations if item=="shaft" else self.parent.tower_stations
         result=[]
         for idx, station in enumerate(list.values()):
             if station.boostable and station.boost.get():
@@ -125,17 +102,36 @@ class Boosts(LabelFrame):
         print(f"get {item}: {result}")
         return result
 
+    def save(self,*args):
+        data={}
+        for list in [self.parent.tower_stations,self.parent.shaft_stations]:
+            for station in list.values():
+                if station.boostable:
+                    data[station.name]=station.boost.get()
+        saveJSON(data, self.json_file)
+
 class Request(LabelFrame):
     def __init__(self, parent, **kwargs):
         LabelFrame.__init__(self, parent, text="Request:")
         self.grid(**kwargs)
+        self.json_file=path.join("data","request.json")
         self.label=Label(self,text="Request Item:")
         self.label.grid(row=0,column=0)
         self.choosen=StringVar()
-        options=parent.temp_req.keys()
+        options=["----"]
+        options.extend(parent.temp_req.keys())
         self.menu=OptionMenu(self,self.choosen,*options)
+        self.load(options)
         self.menu.grid(row=0, column=1)
+        self.choosen.trace_add('write',self.save)
 
+    def load(self,list):
+        name=loadJSON(self.json_file)
+        if len(name) and name in list:
+            self.choosen.set(name)
+
+    def save(self,*args):
+        saveJSON(self.choosen.get(),self.json_file)
 
 class DeepTown(LabelFrame):
     def __init__(self, parent, device):
@@ -144,9 +140,9 @@ class DeepTown(LabelFrame):
         self.device=device
         LabelFrame.__init__(self, parent, text="Deep Town")
         # self.buttons=Buttons(self,row=1,column=1,sticky='nw')
-        self.boosts=Boosts(self,row=2,column=3,sticky='nw')
         self.tasklist=Tasklist(self,row=6,column=1,columnspan=3, sticky='w')
         self.loaddata()
+        self.boosts=Boosts(self,row=2,column=3,sticky='nw')
         self.tasks=Tasks(self, self.tasklist, row=1, column=1, rowspan=5,columnspan=2, sticky='w')
         self.templates=loadTemplates(build_dir("DT_images"))
         self.temp_req=loadTemplates(build_dir(path.join("DT_images","requests")))
@@ -172,21 +168,21 @@ class DeepTown(LabelFrame):
     #     dict={"lbl": Label(frame, text=f"{name}:"),
     #           "btn": Button(frame, text="Start", command=lambda: self.trigger(name,check,button,command,time))}
     #     return dict
-
-    def buildButtons(self,frame):
-        self.buttons={}
-        self.buttons['prntscr']={"btn":Button(frame, text="Print Screen", command=self.device.printScreen)}
-        # self.buttons['areas']={"btn":Button(frame, text="Areas")}
-            # self.buttons['resources']={"btn":Button(frame, text="Resources")}
-
-        i = 1
-        for dict in self.buttons.values():
-            i+=1
-            if "lbl" in dict:
-                dict["lbl"].grid(row=i, column=1)
-                dict["btn"].grid(row=i, column=2)
-            else:
-                dict["btn"].grid(row=i, column=1, columnspan=2)
+    #
+    # def buildButtons(self,frame):
+    #     self.buttons={}
+    #     self.buttons['prntscr']={"btn":Button(frame, text="Print Screen", command=self.device.printScreen)}
+    #     # self.buttons['areas']={"btn":Button(frame, text="Areas")}
+    #         # self.buttons['resources']={"btn":Button(frame, text="Resources")}
+    #
+    #     i = 1
+    #     for dict in self.buttons.values():
+    #         i+=1
+    #         if "lbl" in dict:
+    #             dict["lbl"].grid(row=i, column=1)
+    #             dict["btn"].grid(row=i, column=2)
+    #         else:
+    #             dict["btn"].grid(row=i, column=1, columnspan=2)
 
     def checkTemplates(self, list, templates=False):
         print(f"checking: {list}")
@@ -262,10 +258,12 @@ class DeepTown(LabelFrame):
 
     def loaddata(self):
         self.reset_shaft=False
-        self.reset_tower=False
+        self.shaft_stations=Stations(loadJSON(path.join("data","shaftlist.json")))
         self.shaft=loadJSON(path.join('data','shaftdata.json'))
         if not len(self.shaft):
             self.plan_scan_shaft()
+        self.reset_tower=False
+        self.tower_stations=Stations(loadJSON(path.join("data","towerlist.json")))
         self.tower=loadJSON(path.join('data','towerdata.json'))
         if not len(self.tower):
             self.plan_scan_tower()
@@ -284,7 +282,7 @@ class DeepTown(LabelFrame):
         self.boosted=[]
         self.reset_shaft=False
         scanlist=[]
-        stations=self.boosts.shaft_name_list.keys()
+        stations=self.shaft_stations.keys()
         images=[]
         for i in range(1,9):
             images.append(f"level_{i}")
@@ -325,7 +323,7 @@ class DeepTown(LabelFrame):
     def scan_tower(self):
         self.tower=[]
         scanlist=[]
-        stations=self.boosts.tower_name_list.keys()
+        stations=self.tower_stations.keys()
         images=[]
         for i in range(1,9):
             images.append(f"level_{i}")
@@ -352,7 +350,7 @@ class DeepTown(LabelFrame):
 
     def getTowerType(self, name):
         type=0
-        list=self.boosts.tower_name_list.values()
+        list=self.tower_stations.values()
         print(list)
         for idx,item in enumerate(list):
             if item.name==name:
@@ -502,7 +500,7 @@ class DeepTown(LabelFrame):
 
     def openChests(self):
         images=["return","inventory","menu_chest","closed_chest_small","closed_chest_big","magnifier"]
-        max=3 if self.behind else 10
+        max=5 if self.behind else 15
         if self.checkTemplates(images):
             if self.move_home() and self.tap("inventory"):
                 self.tap("menu_chest")
