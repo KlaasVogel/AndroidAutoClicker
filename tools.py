@@ -1,3 +1,5 @@
+from os import path
+
 
 def printtime(seconds):
     if seconds <= 60:
@@ -17,3 +19,10 @@ def printtime(seconds):
     if sec:
         text=text+f" and {sec} seconds"
     return text
+
+def getName(file):
+    filename=f"{path.splitext(path.split(file)[1])[0]}"
+    for str in ["_C_","_C","_T","_B","L_","R_"]:
+        if str in filename:
+            filename=filename.replace(str,"")
+    return filename

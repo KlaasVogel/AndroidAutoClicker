@@ -183,10 +183,14 @@ class Tasks(LabelFrame):
         self.fields=[]
         self.grid(**kwargs)
         self.json_file=path.join("data","tasks.json")
-        self.print_button=Button(self, text="Print Screen", command=parent.device.printScreen)
-        self.print_button.grid(row=0, column=1)
-        self.start_button=Button(self, text="Start Tasks", command=self.start_tasks)
-        self.start_button.grid(column=2, columnspan=2, row=0)
+        frame=Frame(self)
+        frame.grid(row=0,column=1, columnspan=3)
+        # self.restart_button=Button(frame, text="Resize", command=parent.plan_get_free)
+        # self.restart_button.grid(row=0, column=1)
+        self.print_button=Button(frame, text="Print Screen", command=parent.device.printScreen)
+        self.print_button.grid(row=0, column=2)
+        self.start_button=Button(frame, text="Start Tasks", command=self.start_tasks)
+        self.start_button.grid(column=3, row=0)
         self.build(loadJSON(self.json_file))
 
     def start_tasks(self):

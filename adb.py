@@ -5,6 +5,8 @@ import cv2
 import numpy as np
 from ppadb.client import Client
 from logger import MyLogger, logging
+from json_tools import saveJSON
+# from tools import getName
 
 class Template():
     def __init__(self, template_file):
@@ -28,6 +30,10 @@ class Template():
                 # self.log.debug("T")
                 self.offset[1]=self.h
         # self.log.debug(self.offset)
+        # savedata={"name":self.file, "data":self.data.tolist(), "shape":[self.h, self.w], "offset":self.offset}
+        # name=getName(template_file)
+        # json_file=path.join("templates",name)
+        # saveJSON(savedata,json_file)
     def __repr__(self):
         return f"Template({self.file}, offset={self.offset})"
 
@@ -123,28 +129,45 @@ class Adb_Device():
         if log:
             self.log.info(self.device.shell('dumpsys window a'))
         result=self.device.shell('dumpsys window a | grep "/" | cut -d "{" -f2 | cut -d "/" -f1 | cut -d " " -f2')
+        self.log.info(result)
         return result
 
     def closeApp(self, appname):
         applist=self.getApplist()
         apps=applist.split()
+        namelist=[appname,"AdActivity","vending","ChromeTabbedActivity","Chrome"]
         for app in apps:
-            if "vending" in app:
-                self.device.shell(f"am force-stop {app}")
-                return
-            elif appname in app:
-                self.device.shell(f"am force-stop {app}")
+            for name in namelist:
+                if name in app:
+                    self.log.info(f"closing: {app}")
+                    self.device.shell(f"am force-stop {app}")
 
-    def restartApp(self, appname, activity="none"):
-        self.closeApp(appname)
-        sleep(3)
+    def startApp(self, appname, activity="none"):
         if appname and activity:
             shellcmd=f"am start -n {appname}/{appname}.{activity}"
             self.device.shell(shellcmd)
 
+    def restartApp(self, appname, activity="none"):
+        self.closeApp(appname)
+        sleep(.5)
+        self.startApp(appname, activity)
+        self.getApplist(True)
+
     def release_all(self):
         shellcmd= f"{self.touch} 3 57 -1  && {self.touch} 0 2 0 && {self.touch} 0 0 0"
         self.device.shell(shellcmd)
+
+    def resize_screen(self):
+        result=self.device.shell("wm size")
+        print(result)
+        density=int(self.device.shell("wm density")[-4:])
+        print(density)
+        newdensity=int(density/2)
+        print(newdensity)
+        self.device.shell(f"wm density {newdensity}")
+        sleep(.5)
+        self.device.shell(f"wm density {density}")
+        print(self.device.shell("wm density"))
 
     def zoom_out(self):
         y=0.35
@@ -180,7 +203,7 @@ class Adb_Device():
         with open(screenshot_file, 'wb') as f:
             f.write(screencap)
 
-    def tap(self, x, y):
+    def tap(self, x=-1, y=-1):
         self.device.shell(f'input tap {x} {y}')
         # sleep(.03)
 
