@@ -6,19 +6,19 @@
     "status": 0
   },
   "Collect Oil": {
-    "time": 3,
+    "time": 1,
     "unit": "hour",
     "method": "collect_oil",
-    "status": 0
+    "status": 1
   },
   "Collect Water": {
     "time": 6,
     "unit": "min",
     "method": "collect_water",
-    "status": 0
+    "status": 1
   },
   "Boost Mining": {
-    "time": 3,
+    "time": 4,
     "unit": "min",
     "method": "boost",
     "status": 1
@@ -27,19 +27,19 @@
     "time": 1,
     "unit": "min",
     "method": "boost_product",
-    "status": 0
+    "status": 1
   },
   "Watch Ads": {
     "time": 25,
     "unit": "min",
     "method": "searchAds",
-    "status": 0
+    "status": 1
   },
   "Open Chests": {
-    "time": 5,
+    "time": 15,
     "unit": "min",
     "method": "openChests",
-    "status": 0
+    "status": 1
   },
   "Explore": {
     "time": 61,
@@ -48,13 +48,13 @@
     "status": 0
   },
   "Donate Items": {
-    "time": 20,
+    "time": 15,
     "unit": "min",
     "method": "donate",
-    "status": 0
+    "status": 1
   },
   "Request Item": {
-    "time": 61,
+    "time": 60,
     "unit": "min",
     "method": "request",
     "status": 0

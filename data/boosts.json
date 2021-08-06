@@ -1,11 +1,11 @@
 {
-  "Crafting": 0,
+  "Crafting": 1,
   "Smelting": 1,
   "Chemistry": 1,
-  "Water Collector": 0,
-  "Greenhouse": 0,
-  "Jewel Crafting": 0,
-  "Uranium Enrichment": 0,
+  "Water Collector": 1,
+  "Greenhouse": 1,
+  "Jewel Crafting": 1,
+  "Uranium Enrichment": 1,
   "Mining Station": 0,
   "Chemical Mining": 0,
   "Oil Pump": 0

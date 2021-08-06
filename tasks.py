@@ -64,13 +64,13 @@ class Tasklist(dict):
             self.pop(name)
 
     def run(self):
-        print(self)
+        print("  *** RUN:  *** ")
         while not self.paused:
             cur_time=int(time())
             if len(self):
                 firsttask=sorted(self)[0]
                 if firsttask<=cur_time and not self.busy:
-                    self.parent.behind=True if cur_time-firsttask>20 else False
+                    self.parent.behind=True if cur_time-firsttask>120 else False
                     task=self.pop(firsttask)
                     self.stringTask.set(f"Current Task: {task.name} [started at {strftime('%H:%M:%S',localtime())}]")
                     if task.status.get():
@@ -154,7 +154,6 @@ class Task():
         self.button.grid(column=1, row=self.row, sticky='w')
 
     def toggle(self,*args):
-        print(args)
         self.parent.tasklist.removeTask(self)
         if self.status.get():
             self.parent.tasklist.addTask(self)
@@ -185,8 +184,8 @@ class Tasks(LabelFrame):
         self.json_file=path.join("data","tasks.json")
         frame=Frame(self)
         frame.grid(row=0,column=1, columnspan=3)
-        # self.restart_button=Button(frame, text="Resize", command=parent.plan_get_free)
-        # self.restart_button.grid(row=0, column=1)
+        self.restart_button=Button(frame, text="Hack", command=lambda: self.start_extra(True))
+        self.restart_button.grid(row=0, column=1)
         self.print_button=Button(frame, text="Print Screen", command=parent.device.printScreen)
         self.print_button.grid(row=0, column=2)
         self.start_button=Button(frame, text="Start Tasks", command=self.start_tasks)
@@ -200,6 +199,15 @@ class Tasks(LabelFrame):
         else:
             self.start_button.configure(text="Start Tasks")
             self.tasklist.pause()
+
+    def start_extra(self,go=False):
+        if go:
+            self.master.start_hack()
+            self.restart_button.configure(text="Reset", command=self.start_extra)
+        else:
+            self.master.restart_app()
+            self.restart_button.configure(text="Hack", command=lambda:self.start_extra(True))
+
 
     def build(self, data):
         print(data)
