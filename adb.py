@@ -60,15 +60,15 @@ class Adb_Device():
     output=ShowOutput()
     lastscreen=None
     def __init__(self):
-        self.log=MyLogger('ADB', LOG_LEVEL=logging.INFO)
+        # self.log=MyLogger('ADB', LOG_LEVEL=logging.INFO)
         client=Client(host='127.0.0.1', port=5037)
-        self.log.debug(client.version())
+        # self.log.debug(client.version())
         devices = client.devices()
         if len(devices) == 0:
-            self.log.debug("no devices")
+            # self.log.debug("no devices")
             quit()
         self.device=devices[0]
-        self.log.debug(f'updating info for {self.device}')
+        # self.log.debug(f'updating info for {self.device}')
         number=5
         touch_id=0
         lines=self.device.shell('getevent -p').split("\n")
@@ -83,7 +83,7 @@ class Adb_Device():
                 for value in values:
                     if "max" in value:
                         self.max=int(value[4:])
-                        self.log.debug(f"found max: {self.max}")
+                        # self.log.debug(f"found max: {self.max}")
 
     @staticmethod
     def correct(list1,list2):
@@ -127,9 +127,10 @@ class Adb_Device():
 
     def getApplist(self,log=False):
         if log:
-            self.log.info(self.device.shell('dumpsys window a'))
+            # self.log.info(self.device.shell('dumpsys window a'))
+            pass
         result=self.device.shell('dumpsys window a | grep "/" | cut -d "{" -f2 | cut -d "/" -f1 | cut -d " " -f2')
-        self.log.info(result)
+        # self.log.info(result)
         return result
 
     def closeApp(self, appname):
@@ -139,7 +140,7 @@ class Adb_Device():
         for app in apps:
             for name in namelist:
                 if name in app:
-                    self.log.info(f"closing: {app}")
+                    # self.log.info(f"closing: {app}")
                     self.device.shell(f"am force-stop {app}")
 
     def startApp(self, appname, activity="none"):
@@ -231,7 +232,7 @@ class Adb_Device():
         # self.device.shell(shellcmd)
 
     def move(self, x, y):
-        self.log.debug('moving')
+        # self.log.debug('moving')
         border_x=self.scale_X(500)
         border_y=self.scale_Y(300)
         center_x=self.scale_X(800)
@@ -329,15 +330,15 @@ class Adb_Device():
         img_result=img_base
         loclist=[]
         for template in templates:
-            self.log.debug(template)
+            # self.log.debug(template)
             loc=self.get_match(template, img_base, threshold, margin)
             if len(loc) and len(loc[0]):
                 for pt in zip(*loc[::-1]):  # Switch collumns and rows
                     cv2.rectangle(img_result, pt, (pt[0] + template.w, pt[1] + template.h), (0, 0, 255), 2)
                     x,y=np.add(pt,template.offset).astype(int)
                     if not self.checkClose(x,y,loclist,*offset):
-                        self.log.debug(f"found on {x},{y} ")
-                        self.log.debug(f"point={pt}")
+                        # self.log.debug(f"found on {x},{y} ")
+                        # self.log.debug(f"point={pt}")
                         cv2.rectangle(img_result, pt, (pt[0] + template.w, pt[1] + template.h), (255, 0, 255), 2)
                         loclist.append([x,y])
                 for vector in loclist:

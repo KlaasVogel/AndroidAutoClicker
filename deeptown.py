@@ -1,7 +1,7 @@
 from tkinter import Tk, IntVar, StringVar, Label, Text
 from tkinter.ttk import Frame, LabelFrame, Button, Checkbutton, Entry, OptionMenu
 from dataclasses import dataclass, field
-from os import path, getcwd, mkdir
+from os import path, getcwd, mkdir, rename
 from adb import Template
 from glob import glob
 from time import sleep
@@ -102,6 +102,97 @@ class Stations(dict):
             traceback.print_exc()
     def add(self, image, name, boostable=True):
         self[image]=StationType(name, boostable)
+    def get(self,id):
+        for idx, station in enumerate(self.values()):
+            if idx==id-1:
+                return station.name
+        return " "
+
+class Donation(Frame):
+    def __init__(self, parent, name, template, amount, row, column):
+        Frame.__init__(self, parent)
+        Frame.grid(self, row=row, column=column, sticky='nesw', padx=5)
+        self.parent=parent
+        self.template=template
+        self.name=StringVar()
+        self.name.set(name)
+        self.amount=IntVar()
+        self.amount.set(amount)
+        self.button_down=Button(self, text="▼", width=2, command=self.down)
+        self.button_up=Button(self, text="▲", width=2, command=self.up)
+        self.output=Entry(self,textvariable=self.amount,width=2, state='disabled')
+        self.label=Label(self,textvariable=self.name)
+        self.button_up.pack(side='right')
+        self.output.pack(side='right')
+        self.button_down.pack(side='right')
+        self.label.pack(side='right')
+
+    def delete(self):
+        self.button_down.pack_forget()
+        self.button_up.pack_forget()
+        self.output.pack_forget()
+        self.label.pack_forget()
+
+    def down(self):
+        print("down")
+        amount=self.amount.get()
+        amount-=1
+        self.amount.set(amount)
+        if amount<0:
+            self.button_down.configure(state='disabled')
+        self.parent.save()
+
+    def up(self):
+        print("up")
+        self.button_down.configure(state='normal')
+        amount=self.amount.get()
+        amount+=1
+        self.amount.set(amount)
+        self.parent.save()
+
+class Donations(LabelFrame):
+    def __init__(self, parent, **kwargs):
+        LabelFrame.__init__(self, parent, text="Donations:")
+        self.grid(**kwargs)
+        self.parent=parent
+        self.json_file=path.join("data","donations.json")
+        self.update()
+
+    def save(self):
+        data={}
+        for field in self.fields:
+            data[field.name.get()]=field.amount.get()
+        saveJSON(data, self.json_file)
+
+    def get(self):
+        list=[]
+        for field in self.fields:
+            amount = field.amount.get()
+            if amount != 0:
+                list.append(field)
+        return list
+
+    def update(self):
+        if hasattr(self, "fields"):
+            for field in self.fields:
+                field.delete()
+        else:
+            self.fields=[]
+        fullpath=build_dir(path.join("DT_Images","donations"))
+        templates=loadTemplates(fullpath)
+        total=len(templates)
+        col_max=5
+        row_max=int(total/col_max)+1
+        data=loadJSON(self.json_file)
+        row=0
+        col=1
+        for name,template in templates.items():
+            row+=1
+            if row>row_max:
+                row=1
+                col+=1
+            amount=data[name] if name in data else 0
+            self.fields.append(Donation(self,name,template,amount,row,col))
 
 
 class Boosts(LabelFrame):
@@ -207,15 +298,16 @@ class Request(LabelFrame):
 
 class DeepTown(LabelFrame):
     def __init__(self, parent, device):
-        self.logger=MyLogger('DeepTown', LOG_LEVEL=logging.DEBUG)
+        # self.logger=MyLogger('DeepTown', LOG_LEVEL=logging.DEBUG)
         self.parent=parent
         self.device=device
         LabelFrame.__init__(self, parent, text="Deep Town")
         self.tasklist=Tasklist(self,row=6,column=1,columnspan=3, sticky='w')
         self.loaddata()
-        self.boosts=Boosts(self,row=2,column=3,sticky='nw')
+        self.boosts=Boosts(self,row=2,column=3,columnspan=3,sticky='nw')
         self.boosts.load(self.shaft)
         self.tasks=Tasks(self, self.tasklist, row=1, column=1, rowspan=5,columnspan=2, sticky='w')
+        self.donations=Donations(self, row=6, column=4, rowspan=2, sticky='nesw')
         self.templates=loadTemplates(build_dir("DT_images"))
         self.temp_req=loadTemplates(build_dir(path.join("DT_images","requests")))
         self.temp_don=loadTemplates(build_dir(path.join("DT_images","donations")))
@@ -269,6 +361,12 @@ class DeepTown(LabelFrame):
             sleep(.6)
             location=self.device.locate_item([self.templates[name]],.8,one=True)
         return location
+
+    def locate(self, name):
+        location=self.device.locate_item([self.templates[name]],.8,one=True)
+        if len(location):
+            return location
+        return False
 
     def restart_app(self):
         print("restarting App")
@@ -530,8 +628,13 @@ class DeepTown(LabelFrame):
                     self.navigate(current, area, navigation)
                     current = area
                     if not self.tap("mine_boost",.1):
-                        self.plan_scan_shaft()
-                        break
+                        if hasattr(self, "shafterror") and self.shafterror==current:
+                            self.plan_scan_shaft()
+                            break
+                        else:
+                            print(f"ERROR on floor {current}")
+                            setattr(self, "shafterror", current)
+                            break
                     self.boosted[area]=True
                     playbutton=self.device.locate_item([self.templates["boost_play"]],.8,one=True)
                     if playbutton:
@@ -576,12 +679,35 @@ class DeepTown(LabelFrame):
 
     def find_cross(self):
         print("trying to find cross")
-        sleep(5)
+        if self.locate("return"):
+            return True
+        sleep(2)
         for image in self.templates:
             if "cross" in image and self.tap(image):
                 sleep(1)
+                self.tap("skip")
                 return True
+            if "forward" in image:
+                skip=self.locate(image)
+                if skip:
+                    print("pressing skip")
+                    self.device.tap(*skip)
+                    sleep(4)
+                    print("pressing exit?")
+                    self.device.tap(*skip)
+                    return True
         print("could not find cross")
+        if self.locate("return") or self.locate("inventory"):
+            return True
+        self.device.printScreen()
+        sleep(.5)
+        count=1
+        root=getcwd()
+        while (path.isfile(path.join('images','errors',f"nocross{str(count).rjust(3, '0')}.png"))):
+            count+=1
+        newfile=path.join(root,'images','errors',f"nocross{str(count).rjust(3, '0')}.png")
+        oldfile=path.join(root,'images','screen.png')
+        rename(oldfile, newfile)
         return False
 
     def boost_product(self):
@@ -590,11 +716,13 @@ class DeepTown(LabelFrame):
             boostlist=self.getTowerBoosts()
             if self.checkTemplates(images) and self.move_home():
                 self.tap("main_up")
+                sleep(1)
                 button_dwn=self.device.locate_item([self.templates["tower_down"]],.8,one=True)
                 for type,lvl in self.tower:
                     self.device.tap(*button_dwn)
                     sleep(.3)
-                    print(type, lvl)
+                    name = self.tower_stations.get(type)
+                    print(f"{name} [{lvl}]")
                     if type in boostlist:
                         sleep(.3)
                         if not (self.tap("production_boost",.5,.5) or self.tap("production_boost_2",.5,.5)):
@@ -607,11 +735,12 @@ class DeepTown(LabelFrame):
                                 break
                         while(self.tap("exit_boost",.3)):
                             print("closing menu's")
+                        sleep(2)
             self.move_home()
 
 
     def openChests(self):
-        images=["return","inventory","menu_chest","closed_chest_small","closed_chest_big","magnifier"]
+        images=["return","inventory","menu_chest","closed_chest_small","magnifier"]
         max=25 if self.behind else 40
         loc_big_chest=[]
         loc_mag=[]
@@ -624,9 +753,9 @@ class DeepTown(LabelFrame):
                 count=0
                 while location and count<max:
                     self.device.tap(*location)
-                    loc_big_chest=self.getLoc(loc_big_chest,"closed_chest_big")
-                    self.device.tap(*loc_big_chest)
-                    sleep(.2)
+                    # loc_big_chest=self.getLoc(loc_big_chest,"closed_chest_big")
+                    # self.device.tap(*loc_big_chest)
+                    # sleep(.2)
                     loc_mag=self.getLoc(loc_mag,"magnifier")
                     self.device.tap(*loc_mag)
                     sleep(.1)
@@ -646,14 +775,14 @@ class DeepTown(LabelFrame):
             self.device.tap(*location)
             sleep(3)
             if not self.tap("ok"):
-                wait=random.randrange(31, 36)
+                wait=random.randrange(32, 36)
                 sleep(wait)
                 if showActivity:
                     self.device.getApplist(True)
                 self.device.go_back()
                 sleep(2)
                 if not self.device.locate_item([self.templates[exit]],.8, one=True):
-                    self.logger.debug("Stuck on Ad?")
+                    # self.logger.debug("Stuck on Ad?")
                     if not self.find_cross():
                         sleep(1)
                         self.device.go_back()
@@ -663,7 +792,7 @@ class DeepTown(LabelFrame):
 
     def searchAds(self):
         # max=1 if self.behind else 4
-        max=6
+        max=10
         images=["return","store","store2","watch_free","claim"]
         if self.checkTemplates(images):
             store_button=self.device.locate_item([self.templates["store"],self.templates["store2"]],.75,one=True)
@@ -680,8 +809,12 @@ class DeepTown(LabelFrame):
                 sleep(3)
                 self.device.tap(*store_button)
                 sleep(2)
-            if len(self.device.locate_item([self.templates["watch_free"]],.65,one=True)):
-                self.plan_get_free()
+            free_money=self.device.locate_item([self.templates["watch_free"]],.65,one=True)
+            if len(free_money):
+                self.watchAd(free_money, "return", False)
+                sleep(10)
+                self.tap("exit_boost")
+                sleep(12)
             location=self.device.locate_item([self.templates["claim"]],.65,one=True,last=True)
             while (location and count<max):
                 self.watchAd(location, "return", False)
@@ -723,7 +856,7 @@ class DeepTown(LabelFrame):
                 for x in range(5):
                     if self.tap("request_claim"):
                         print("Whooot!")
-                    self.device.swipe(200,600,200,1200,speed=500)
+                    self.device.swipe(200,600,200,1200,speed=1000)
                     sleep(.5)
                 self.device.go_back()
 
@@ -756,12 +889,9 @@ class DeepTown(LabelFrame):
 
     def donate(self):
         images=["menu_guild","chat","request_big", "request_small","donate"]
-        donations=["Alexandrite","Water"]
-        if len(donations) and self.checkTemplates(images) and self.checkTemplates(donations, self.temp_don):
-            templates=[]
-            for name in donations:
-                templates.append(self.temp_don[name])
-            print(templates)
+        self.donations.update()
+        donations=self.donations.get()
+        if len(donations) and self.checkTemplates(images):
             self.clearMem()
             if self.tap("menu_guild"):
                 self.tap("chat")
@@ -770,25 +900,30 @@ class DeepTown(LabelFrame):
                     donate_buttons=self.device.locate_item([self.templates["donate"]],.9)
                     if len(donate_buttons):
                         print(f"found: {donate_buttons}")
-                        requests=self.device.locate_item(templates,.9, last=True)
-                        if len(requests):
-                            print(f"found request: {requests}")
-                            for request in requests:
-                                for button in donate_buttons:
-                                    if abs(button[1]-request[1])<50:
-                                        print(f"start donate! {button}")
-                                        self.device.tap(*button)
-                                        sleep(.5)
-                                        bar=self.device.locate_item([self.templates["bar"]],.8, one=True)
-                                        pen=self.device.locate_item([self.templates["pen"]],.8,last=True, one=True)
-                                        ok=self.device.locate_item([self.templates["ok_donate"]],.8,last=True, one=True)
-                                        if (len(bar) and len(pen) and len(ok)):
-                                            self.device.swipe(*bar,*pen,speed=1400)
+                        for field in donations:
+                            requests=self.device.locate_item([field.template],.9, last=True)
+                            if len(requests):
+                                print(f"found request for {field.name.get()}: {requests}")
+                                for request in requests:
+                                    for button in donate_buttons:
+                                        if abs(button[1]-request[1])<50 and field.amount.get()!=0:
+                                            print(f"start donate! {button}")
+                                            self.device.tap(*button)
                                             sleep(.5)
-                                            self.device.tap(*ok)
-                                            sleep(1)
-                                        else:
-                                            self.device.go_back()
+                                            bar=self.device.locate_item([self.templates["bar"]],.8, one=True)
+                                            pen=self.device.locate_item([self.templates["pen"]],.8,last=True, one=True)
+                                            ok=self.device.locate_item([self.templates["ok_donate"]],.8,last=True, one=True)
+                                            if (len(bar) and len(pen) and len(ok)):
+                                                self.device.swipe(*bar,*pen,speed=1400)
+                                                sleep(.5)
+                                                self.device.tap(*ok)
+                                                sleep(1)
+                                                field.down()
+                                            else:
+                                                self.device.go_back()
                     self.device.swipe(200,600,200,1200,speed=500)
                     sleep(.5)
                 self.device.go_back()
+
+    def spy(self):
+        images=["menu_guild","chat","request_big", "request_small","donate"]

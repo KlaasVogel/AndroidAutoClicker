@@ -12,7 +12,7 @@
     "status": 1
   },
   "Collect Water": {
-    "time": 6,
+    "time": 4,
     "unit": "min",
     "method": "collect_water",
     "status": 1
@@ -30,13 +30,13 @@
     "status": 1
   },
   "Watch Ads": {
-    "time": 25,
+    "time": 35,
     "unit": "min",
     "method": "searchAds",
     "status": 1
   },
   "Open Chests": {
-    "time": 15,
+    "time": 7,
     "unit": "min",
     "method": "openChests",
     "status": 1

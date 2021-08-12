@@ -7,5 +7,6 @@
   "Jewel Crafting": {"image":"jewel_crafting", "boost":true},
   "Trading": {"image":"trading", "boost":false},
   "Uranium Enrichment": {"image":"uranium_enrichment", "boost":true},
-  "Nuclear Plant": {"image":"nuclear_plant", "boost":false}
+  "Nuclear Plant": {"image":"nuclear_plant", "boost":false},
+  "Observatory": {"image":"observatory", "boost":false}
 }

@@ -19,7 +19,7 @@ from threading import Thread
 class Tasklist(dict):
     def __init__(self,parent,**kwargs):
         self.parent=parent
-        self.log=parent.logger
+        # self.log=parent.logger
         self.parent.behind=False
         self.frame=LabelFrame(self.parent, text="Taskslist:")
         self.frame.grid(**kwargs)
@@ -143,7 +143,7 @@ class Task():
         self.time.trace_add('write', self.parent.save)
         unit=self.unit
         self.unit=StringVar()
-        self.menu=OptionMenu(self.parent,self.unit,*["min","hour"])
+        self.menu=OptionMenu(self.parent,self.unit,*["---","min","hour"])
         self.menu.grid(row=self.row, column=3, sticky='w')
         self.unit.set(unit)
         self.unit.trace_add('write', self.parent.save)
