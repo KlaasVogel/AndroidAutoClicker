@@ -4,39 +4,8 @@ from time import sleep
 import cv2
 import numpy as np
 from ppadb.client import Client
-from logger import MyLogger, logging
-from json_tools import saveJSON
-# from tools import getName
 
-class Template():
-    def __init__(self, template_file):
-        self.offset=[0.0,0.0]
-        self.w,self.h=[0,0]
-        self.data=[]
-        if path.isfile(template_file):
-            self.file=path.split(template_file)[-1]
-            self.data= cv2.imread(template_file)
-            self.h,self.w = self.data.shape[:-1]
-            if "_C" in template_file:
-                # self.log.debug("C")
-                self.offset=[self.w/2,self.h/2]
-            if "R_" in template_file:
-                # self.log.debug("R")
-                self.offset[0]=0
-            if "L_" in template_file:
-                # self.log.debug(f"L {self.w}")
-                self.offset[0]=self.w
-            if "_T" in template_file:
-                # self.log.debug("T")
-                self.offset[1]=self.h
-        # self.log.debug(self.offset)
-        # savedata={"name":self.file, "data":self.data.tolist(), "shape":[self.h, self.w], "offset":self.offset}
-        # name=getName(template_file)
-        # json_file=path.join("templates",name)
-        # saveJSON(savedata,json_file)
-    def __repr__(self):
-        return f"Template({self.file}, offset={self.offset})"
-
+RESOLUTION = [1600,900] #"900x1600"
 
 class ShowOutput():
     def __init__(self):
@@ -55,10 +24,11 @@ class ShowOutput():
 class Adb_Device():
     device=None
     touch="/dev/input/event6"
-    res_x, res_y= [1600,900]
+    res_x, res_y = RESOLUTION
     max=32767
     output=ShowOutput()
     lastscreen=None
+
     def __init__(self):
         # self.log=MyLogger('ADB', LOG_LEVEL=logging.INFO)
         client=Client(host='127.0.0.1', port=5037)
@@ -67,7 +37,16 @@ class Adb_Device():
         if len(devices) == 0:
             # self.log.debug("no devices")
             quit()
-        self.device=devices[0]
+        print(devices)
+        for device in devices:
+            print(device.shell('wm size'))
+            if self.get_resolution() in device.shell('wm size'):
+                print('yes')
+                self.device=device
+        if not self.device:
+            exit("geen device gevonden")
+            # print (device.shell('getevent -p'))
+        # self.device=devices[0]
         # self.log.debug(f'updating info for {self.device}')
         number=5
         touch_id=0
@@ -77,13 +56,17 @@ class Adb_Device():
                 number=line[-1]
             if "Touch" in line:
                 touch_id=number
-                self.touch=f"sendevent /dev/input/event{number}"
+                touch=f"sendevent /dev/input/event{number}"
             if "max" in line and "ABS" in line and number==touch_id:
                 values=line.split(', ')
                 for value in values:
                     if "max" in value:
-                        self.max=int(value[4:])
-                        # self.log.debug(f"found max: {self.max}")
+                        max=int(value[4:])
+                        print(f"found max: {max} - touch_id = {touch_id}")
+        self.printScreen()
+
+    def get_resolution(self) -> str:
+        return f"{self.res_y}x{self.res_x}"
 
     @staticmethod
     def correct(list1,list2):
@@ -159,16 +142,11 @@ class Adb_Device():
         self.device.shell(shellcmd)
 
     def resize_screen(self):
-        result=self.device.shell("wm size")
-        print(result)
         density=int(self.device.shell("wm density")[-4:])
-        print(density)
         newdensity=int(density/2)
-        print(newdensity)
         self.device.shell(f"wm density {newdensity}")
         sleep(.5)
         self.device.shell(f"wm density {density}")
-        print(self.device.shell("wm density"))
 
     def zoom_out(self):
         y=0.35
@@ -197,6 +175,11 @@ class Adb_Device():
         # self.device.shell(f"input swipe {(x_c+dx)*self.res_x} {(y)*self.res_y} {(x_c-dx)*self.res_x} {(y)*self.res_y} 2000")
         # self.release_all()
         # self.release_all()
+    def printLast(self):
+        screencap = self.lastscreen
+        screenshot_file=path.join('images','screen.png')
+        with open(screenshot_file, 'wb') as f:
+            f.write(screencap)
 
     def printScreen(self):
         screencap = self.device.screencap()
@@ -323,6 +306,16 @@ class Adb_Device():
         img=self.lastscreen
         (b,g,r) = img[y,x]
         return [r,g,b]
+
+    def getRow(self,row,last=True):
+        img_base=self.lastscreen if last else self.load_screenCap()
+        rows,cols,colors=img_base.shape
+        # rows, cols=img_base.shape
+        result=[]
+        for col in range(cols):
+            (b,g,r)=img_base[row,col]
+            result.append([r,g,b])
+        return result
 
     def locate_item(self,templates,threshold=0.75,margin=0.05,one=False,offset=[30,16],last=False, show=False):
         result_file=path.join('images','result.png')

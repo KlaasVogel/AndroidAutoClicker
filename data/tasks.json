@@ -1,9 +1,9 @@
 {
   "Collect Ores": {
-    "time": 4,
+    "time": 6,
     "unit": "min",
     "method": "collect_ore",
-    "status": 0
+    "status": 1
   },
   "Collect Oil": {
     "time": 1,
@@ -24,13 +24,13 @@
     "status": 1
   },
   "Boost Production": {
-    "time": 1,
-    "unit": "min",
+    "time": 5,
+    "unit": "sec",
     "method": "boost_product",
     "status": 1
   },
   "Watch Ads": {
-    "time": 35,
+    "time": 45,
     "unit": "min",
     "method": "searchAds",
     "status": 1
@@ -48,13 +48,13 @@
     "status": 0
   },
   "Donate Items": {
-    "time": 15,
+    "time": 7,
     "unit": "min",
     "method": "donate",
     "status": 1
   },
   "Request Item": {
-    "time": 60,
+    "time": 90,
     "unit": "min",
     "method": "request",
     "status": 0
@@ -64,5 +64,11 @@
     "unit": "min",
     "method": "claim",
     "status": 0
+  },
+  "Get Levels": {
+    "time": 1,
+    "unit": "hour",
+    "method": "spy",
+    "status": 1
   }
 }

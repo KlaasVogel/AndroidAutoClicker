@@ -1,3 +1,13 @@
+#VSCode
+.vscode/
+
+#APP-Images and data
+DT_images/
+DT_images/donations/
+data/*
+*.json
+*.png
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

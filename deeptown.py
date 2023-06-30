@@ -2,7 +2,7 @@ from tkinter import Tk, IntVar, StringVar, Label, Text
 from tkinter.ttk import Frame, LabelFrame, Button, Checkbutton, Entry, OptionMenu
 from dataclasses import dataclass, field
 from os import path, getcwd, mkdir, rename
-from adb import Template
+from templates import Template
 from glob import glob
 from time import sleep
 from logger import MyLogger, logging
@@ -13,6 +13,7 @@ import random
 from time import time, localtime, strftime
 import numpy as np
 from tools import getName
+from database import MyDB
 
 def build_dir(map):
     if not path.isdir(map):
@@ -62,6 +63,7 @@ class Station(Frame):
         self.area=IntVar(value=area)
         self.boost=IntVar(0)
         self.boost.set(1) if boost else self.boost.set(0)
+        self.json_boosted=path.join("data",parent.parent.resolution,"boosted.json")
         Frame.__init__(self, parent)
         self.labels=[]
         self.labels.append(Checkbutton(parent, textvariable=self.area, variable=self.boost, onvalue=1))
@@ -77,14 +79,13 @@ class Station(Frame):
     def update(self,*args):
         print(f"saving boosts: {args}")
         data=[]
-        json_file=path.join("data","boosted.json")
-        data=loadJSON(json_file)
+        data=loadJSON(self.json_boosted)
         area=self.area.get()
         if self.boost.get() and area not in data:
             data.append(area)
         if not self.boost.get() and area in data:
             data.remove(area)
-        saveJSON(data,json_file)
+        saveJSON(data,self.json_boosted)
 
     def delete(self):
         for label in self.labels:
@@ -116,11 +117,12 @@ class Donation(Frame):
         self.template=template
         self.name=StringVar()
         self.name.set(name)
-        self.amount=IntVar()
-        self.amount.set(amount)
+        self.amount=amount
+        self.amountText=IntVar()
+        self.amountText.set(amount)
         self.button_down=Button(self, text="▼", width=2, command=self.down)
         self.button_up=Button(self, text="▲", width=2, command=self.up)
-        self.output=Entry(self,textvariable=self.amount,width=2, state='disabled')
+        self.output=Entry(self,textvariable=self.amountText,width=2, state='disabled')
         self.label=Label(self,textvariable=self.name)
         self.button_up.pack(side='right')
         self.output.pack(side='right')
@@ -132,22 +134,24 @@ class Donation(Frame):
         self.button_up.pack_forget()
         self.output.pack_forget()
         self.label.pack_forget()
+        self.destroy()
 
     def down(self):
         print("down")
-        amount=self.amount.get()
-        amount-=1
-        self.amount.set(amount)
-        if amount<0:
-            self.button_down.configure(state='disabled')
-        self.parent.save()
+        self.amount-=1
+        print(f"{self.name.get()} - new amount: {self.amount}")
+        if self.amount<0:
+            try:
+                self.button_down.configure(state='disabled')
+            except:
+                print("Could not disable button")
+            self.amount=-1
+        self.parent.save(name=self.name.get(), amount=self.amount)
 
     def up(self):
         print("up")
         self.button_down.configure(state='normal')
-        amount=self.amount.get()
-        amount+=1
-        self.amount.set(amount)
+        self.amount+=1
         self.parent.save()
 
 class Donations(LabelFrame):
@@ -155,25 +159,28 @@ class Donations(LabelFrame):
         LabelFrame.__init__(self, parent, text="Donations:")
         self.grid(**kwargs)
         self.parent=parent
-        self.json_file=path.join("data","donations.json")
+        self.json_file=path.join("data",parent.resolution,"donations.json")
         self.update()
 
-    def save(self):
+    def save(self,name="",amount=0):
         data={}
         for field in self.fields:
-            data[field.name.get()]=field.amount.get()
+            fieldname=field.name.get()
+            new_amount=amount if fieldname==name else field.amount
+            data[fieldname]=new_amount
+            field.amountText.set(new_amount)
         saveJSON(data, self.json_file)
 
     def get(self):
         list=[]
         for field in self.fields:
-            amount = field.amount.get()
-            if amount != 0:
+            if field.amount != 0:
                 list.append(field)
         return list
 
     def update(self):
         if hasattr(self, "fields"):
+            self.save()
             for field in self.fields:
                 field.delete()
         else:
@@ -181,7 +188,7 @@ class Donations(LabelFrame):
         fullpath=build_dir(path.join("DT_Images","donations"))
         templates=loadTemplates(fullpath)
         total=len(templates)
-        col_max=5
+        col_max=4
         row_max=int(total/col_max)+1
         data=loadJSON(self.json_file)
         row=0
@@ -200,8 +207,9 @@ class Boosts(LabelFrame):
         LabelFrame.__init__(self,parent, text="Boosts:")
         self.grid(**kwargs)
         self.parent=parent
-        self.json_file=path.join("data","boosts.json")
-        boostlist=loadJSON(self.json_file)
+        self.json_boosts=path.join("data",parent.resolution,"boosts.json")
+        self.json_boosted=path.join("data",parent.resolution,"boosted.json")
+        boostlist=loadJSON(self.json_boosts)
         self.items=[]
         self.stations=[]
         for name,list in {"Tower:":parent.tower_stations, "Shaft:":parent.shaft_stations}.items():
@@ -216,12 +224,11 @@ class Boosts(LabelFrame):
             item.grid(row=idx+1,column=1, sticky='ew')
 
     def load(self, shaftlist):
-        json_file=path.join("data","boosted.json")
         maxlevel=len(shaftlist)
         for station in self.stations:
             station.delete()
         self.stations=[]
-        boostlist=loadJSON(json_file)
+        boostlist=loadJSON(self.json_boosted)
         typenames=[]
         typelist=list(self.parent.shaft_stations.values())
         for type in typelist:
@@ -271,13 +278,13 @@ class Boosts(LabelFrame):
                     for item in self.stations:
                         if item.type.get()==name:
                             item.boost.set(boost)
-        saveJSON(data, self.json_file)
+        saveJSON(data, self.json_boosts)
 
 class Request(LabelFrame):
     def __init__(self, parent, **kwargs):
         LabelFrame.__init__(self, parent, text="Request:")
         self.grid(**kwargs)
-        self.json_file=path.join("data","request.json")
+        self.json_file=path.join("data",parent.resolution,"request.json")
         self.label=Label(self,text="Request Item:")
         self.label.grid(row=0,column=0)
         self.choosen=StringVar()
@@ -297,20 +304,21 @@ class Request(LabelFrame):
         saveJSON(self.choosen.get(),self.json_file)
 
 class DeepTown(LabelFrame):
-    def __init__(self, parent, device):
+    def __init__(self, parent, device, resolution="900x1600"):
         # self.logger=MyLogger('DeepTown', LOG_LEVEL=logging.DEBUG)
         self.parent=parent
         self.device=device
+        self.resolution=resolution
         LabelFrame.__init__(self, parent, text="Deep Town")
         self.tasklist=Tasklist(self,row=6,column=1,columnspan=3, sticky='w')
         self.loaddata()
         self.boosts=Boosts(self,row=2,column=3,columnspan=3,sticky='nw')
         self.boosts.load(self.shaft)
-        self.tasks=Tasks(self, self.tasklist, row=1, column=1, rowspan=5,columnspan=2, sticky='w')
+        self.tasks=Tasks(self, self.tasklist, self.resolution, row=1, column=1, rowspan=5,columnspan=2, sticky='w')
         self.donations=Donations(self, row=6, column=4, rowspan=2, sticky='nesw')
-        self.templates=loadTemplates(build_dir("DT_images"))
-        self.temp_req=loadTemplates(build_dir(path.join("DT_images","requests")))
-        self.temp_don=loadTemplates(build_dir(path.join("DT_images","donations")))
+        self.templates=loadTemplates(build_dir(path.join("DT_images",self.resolution)))
+        self.temp_req=loadTemplates(build_dir(path.join("DT_images",self.resolution,"requests")))
+        self.temp_don=loadTemplates(build_dir(path.join("DT_images",self.resolution,"donations")))
         self.requests=Request(self,row=1,column=3, sticky='nw')
 
     def checkTemplates(self, list, templates=False):
@@ -362,8 +370,8 @@ class DeepTown(LabelFrame):
             location=self.device.locate_item([self.templates[name]],.8,one=True)
         return location
 
-    def locate(self, name):
-        location=self.device.locate_item([self.templates[name]],.8,one=True)
+    def locate(self, name, last=False):
+        location=self.device.locate_item([self.templates[name]],.8,one=True,last=last)
         if len(location):
             return location
         return False
@@ -408,13 +416,13 @@ class DeepTown(LabelFrame):
 
     def loaddata(self):
         self.reset_shaft=False
-        self.shaft_stations=Stations(loadJSON(path.join("data","shaftlist.json")))
-        self.shaft=loadJSON(path.join('data','shaftdata.json'))
+        self.shaft_stations=Stations(loadJSON(path.join("data",self.resolution,"shaftlist.json")))
+        self.shaft=loadJSON(path.join('data',self.resolution,'shaftdata.json'))
         if not len(self.shaft):
             self.plan_scan_shaft()
         self.reset_tower=False
-        self.tower_stations=Stations(loadJSON(path.join("data","towerlist.json")))
-        self.tower=loadJSON(path.join('data','towerdata.json'))
+        self.tower_stations=Stations(loadJSON(path.join("data",self.resolution,"towerlist.json")))
+        self.tower=loadJSON(path.join('data',self.resolution,'towerdata.json'))
         if not len(self.tower):
             self.plan_scan_tower()
 
@@ -458,7 +466,7 @@ class DeepTown(LabelFrame):
                                 result=[id+1,i]
                                 break
                 scanlist.append(result)
-        saveJSON(scanlist,path.join("data","shaftdata.json"))
+        saveJSON(scanlist,path.join("data",self.resolution,"shaftdata.json"))
         self.shaft=scanlist
         self.boosts.load(self.shaft)
 
@@ -514,7 +522,7 @@ class DeepTown(LabelFrame):
                 print(result)
                 scanlist.append(result)
             print(scanlist)
-        saveJSON(scanlist,path.join("data","towerdata.json"))
+        saveJSON(scanlist,path.join("data",self.resolution,"towerdata.json"))
         self.tower=scanlist
 
     def getTowerType(self, name):
@@ -526,7 +534,31 @@ class DeepTown(LabelFrame):
         return type
 
     def explore(self):
-        pass
+        print("EXPLORE")
+        images=["main_down", "mine_up", "tower_down", "expedition_next", "expedition_claim", "expedition_start" ]
+        current,collectlist=self.getDrillList([4])
+        if len(collectlist) and self.checkTemplates(images):
+            self.clearMem()
+            self.tap("main_down",1)
+            navigation=self.getNavigation()
+            for area in collectlist:
+                self.navigate(current, area, navigation)
+                current = area
+                sleep(.3)
+                while (self.tap("expedition_next")):
+                    print("  --> next chapter")
+                if self.tap("expedition_claim",1):
+                    print("claiming Price")
+                    sleep(2)
+                if self.tap("expedition_start",1):
+                    print(" --> staring next exploration")
+        self.move_home()
+
+
+        self.move_home()
+
+
+
         # self.logger.debug("Expedition")
         # images=["main_down", "mine_up", "expedition_next", "expedition_claim", "expedition_start"]
         # movelist=clearEnd(self.getDrillList([4]))
@@ -873,8 +905,8 @@ class DeepTown(LabelFrame):
                     dcount=1
                     x=557
                     while not self.tap(request, templates=self.temp_req):
-                        y=[970,400] if count<6 else [400,970]
-                        self.device.swipe(x,y[0],x,y[1],speed=200)
+                        y=[970,400] if dcount>0 else [400,970]
+                        self.device.swipe(x,y[0],x,y[1],speed=800)
                         sleep(.7)
                         count+=dcount
                         if count >= 10:
@@ -890,8 +922,7 @@ class DeepTown(LabelFrame):
     def donate(self):
         images=["menu_guild","chat","request_big", "request_small","donate"]
         self.donations.update()
-        donations=self.donations.get()
-        if len(donations) and self.checkTemplates(images):
+        if self.checkTemplates(images):
             self.clearMem()
             if self.tap("menu_guild"):
                 self.tap("chat")
@@ -900,30 +931,121 @@ class DeepTown(LabelFrame):
                     donate_buttons=self.device.locate_item([self.templates["donate"]],.9)
                     if len(donate_buttons):
                         print(f"found: {donate_buttons}")
-                        for field in donations:
-                            requests=self.device.locate_item([field.template],.9, last=True)
-                            if len(requests):
-                                print(f"found request for {field.name.get()}: {requests}")
-                                for request in requests:
-                                    for button in donate_buttons:
-                                        if abs(button[1]-request[1])<50 and field.amount.get()!=0:
-                                            print(f"start donate! {button}")
-                                            self.device.tap(*button)
+                        main_image=self.device.lastscreen
+                        for button in donate_buttons:
+                            self.device.lastscreen=main_image[button[1]-110:button[1]+110,90:300]
+                            # self.device.printLast()
+                            for field in self.donations.fields:
+                                if field.amount!=0:
+                                    requests=self.device.locate_item([field.template],.99, last=True)
+                                    if len(requests):
+                                        print(f"found request for {field.name.get()}: {requests}")
+                                        print(f"start donate! {button}")
+                                        self.device.tap(*button)
+                                        sleep(.5)
+                                        bar=self.device.locate_item([self.templates["bar"]],.8, one=True)
+                                        pen=self.device.locate_item([self.templates["pen"]],.8,last=True, one=True)
+                                        ok=self.device.locate_item([self.templates["ok_donate"]],.8,last=True, one=True)
+                                        if (len(bar) and len(pen) and len(ok)):
+                                            self.device.swipe(*bar,*pen,speed=1400)
                                             sleep(.5)
-                                            bar=self.device.locate_item([self.templates["bar"]],.8, one=True)
-                                            pen=self.device.locate_item([self.templates["pen"]],.8,last=True, one=True)
-                                            ok=self.device.locate_item([self.templates["ok_donate"]],.8,last=True, one=True)
-                                            if (len(bar) and len(pen) and len(ok)):
-                                                self.device.swipe(*bar,*pen,speed=1400)
-                                                sleep(.5)
-                                                self.device.tap(*ok)
-                                                sleep(1)
-                                                field.down()
-                                            else:
-                                                self.device.go_back()
+                                            self.device.tap(*ok)
+                                            sleep(1)
+                                            field.down()
+                                        else:
+                                            self.device.go_back()
+
+                    #     for field in self.donations.fields:
+                    #         if field.amount!=0:
+                    #             requests=self.device.locate_item([field.template],.99, last=True)
+                    #             if len(requests):
+                    #                 print(f"found request for {field.name.get()}: {requests}")
+                    #                 for request in requests:
+                    #                     for button in donate_buttons:
+                    #                         if abs(button[1]-request[1])<50 and field.amount!=0:
+                    #                             print(f"start donate! {button}")
+                    #                             self.device.tap(*button)
+                    #                             sleep(.5)
+                    #                             bar=self.device.locate_item([self.templates["bar"]],.8, one=True)
+                    #                             pen=self.device.locate_item([self.templates["pen"]],.8,last=True, one=True)
+                    #                             ok=self.device.locate_item([self.templates["ok_donate"]],.8,last=True, one=True)
+                    #                             if (len(bar) and len(pen) and len(ok)):
+                    #                                 self.device.swipe(*bar,*pen,speed=1400)
+                    #                                 sleep(.5)
+                    #                                 self.device.tap(*ok)
+                    #                                 sleep(1)
+                    #                                 field.down()
+                    #                             else:
+                    #                                 self.device.go_back()
                     self.device.swipe(200,600,200,1200,speed=500)
                     sleep(.5)
                 self.device.go_back()
 
+    def getPixel(self, row):
+        pixel=979
+        row=self.device.getRow(row,last=True)
+        for idx,(r,g,b) in enumerate(row):
+            if idx>979 and idx<1250:
+                if r<35 and g>150 and b>220:
+                    pixel=idx
+        return(pixel)
+
+
+    def getLevel(self):
+        fullpath=build_dir(path.join("DT_Images",self.resolution,"levels"))
+        templates=loadTemplates(fullpath)
+        last=False
+        for level in templates:
+            location=self.device.locate_item([templates[level]],.97,last=last,one=True)
+            if len(location):
+                pixel=self.getPixel(497)
+                return [int(level),pixel]
+            last=True
+        return [0,0]
+
     def spy(self):
-        images=["menu_guild","chat","request_big", "request_small","donate"]
+        images=["menu_guild","guild_list"]
+        res=int(self.resolution.split("x")[1])
+        if self.checkTemplates(images):
+            self.clearMem()
+            db=MyDB()
+            fullpath=build_dir(path.join("DT_Images",self.resolution,"guilds",))
+            templates=loadTemplates(fullpath)
+            record={}
+            for guild in templates:
+                record[guild]=False
+            print(record)
+            if len(record) and self.tap("menu_guild"):
+                sleep(2)
+                self.tap("guild_list")
+                count=0
+                for x in range(3):
+                    last=False
+                    for guild in record:
+                        if not record[guild]:
+                            print(f"searching for {guild}")
+                            guild_loc=self.device.locate_item([templates[guild]], last=last, one=True)
+                            if len(guild_loc):
+                                print(f"found at: {guild_loc}")
+                                self.device.tap(*guild_loc)
+                                sleep(1)
+                                print("searching level")
+                                level,pixel=self.getLevel()
+                                if level:
+                                    print(f"guild: {guild} - level: {level} - pixel: {pixel}")
+                                    (guildID,name)=db.query(f"SELECT * FROM `guilds` WHERE `name`='{guild}'")[0]
+                                    if not guildID:
+                                        db.update(f"INSERT INTO `guilds` (name) VALUES ('{guild}')")
+                                        guildID=db.lastID()
+                                    if db.update(f"INSERT INTO `pixels` (guildID, res, level, pixels) VALUES ({guildID},{res},{level},{pixel})"):
+                                        record[guild]=True
+                                self.device.go_back()
+                                sleep(2)
+                                last=False
+                            else:
+                                last=True
+                    self.device.swipe(777,1530,777,800,speed=1200)
+                    sleep(2)
+                self.device.go_back()
+
+            db.close()

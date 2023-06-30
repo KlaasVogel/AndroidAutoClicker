@@ -1,19 +1,12 @@
-from tkinter import Tk, IntVar, StringVar, Label, Text
+from tkinter import Tk, IntVar, StringVar, Label, Text, Misc
 from tkinter.ttk import Frame, LabelFrame, Button, Checkbutton, Entry, OptionMenu
-from dataclasses import dataclass, field
-from os import path, getcwd, mkdir
-from json_tools import loadJSON, saveJSON
+from dataclasses import dataclass, field, InitVar
 from tools import printtime
 import traceback
 from time import time, sleep, localtime, strftime
 from threading import Thread
-
-# @dataclass
-# class Task():
-#     name: str
-#     check: str
-#     job: str = field(repr=False)
-#     time: float
+from adb import Adb_Device
+from json_tools import JSONs
 
 
 class Tasklist(dict):
@@ -49,7 +42,7 @@ class Tasklist(dict):
     def setTask(self,task, firsttime=False):
         if task.time.get() or firsttime:
             # self.log.debug(f'\n resetting job for {task.name}')
-            multiplier = 3600 if task.unit.get()=="hour" else 60
+            multiplier = 3600 if task.unit.get()=="hour" else 60 if task.unit.get()=="min" else 1
             new_time=int(time()) if firsttime else int(time())+task.time.get()*multiplier
             while new_time in self:
                 new_time+=1
@@ -78,6 +71,7 @@ class Tasklist(dict):
                         task.job()
                         self.busy=False
                         self.setTask(task)
+                    self.stringTask.set("Current Task: ")
             sleep(1)
 
     def getData(self):
@@ -142,8 +136,8 @@ class Task():
         self.time.set(time)
         self.time.trace_add('write', self.parent.save)
         unit=self.unit
-        self.unit=StringVar()
-        self.menu=OptionMenu(self.parent,self.unit,*["---","min","hour"])
+        self.unit=StringVar(value="---")
+        self.menu=OptionMenu(self.parent,self.unit,*["---","sec","min","hour"])
         self.menu.grid(row=self.row, column=3, sticky='w')
         self.unit.set(unit)
         self.unit.trace_add('write', self.parent.save)
@@ -174,23 +168,25 @@ class Task():
              }
         return [self.name,data]
 
+@dataclass
 class Tasks(LabelFrame):
-    def __init__(self, parent, tasklist, **kwargs):
-        self.master=parent
-        self.tasklist=tasklist
-        LabelFrame.__init__(self, parent, text="Tasks:")
+    parent: InitVar
+    device: Adb_Device
+    tasklist: Tasklist
+    jsons: JSONs
+    def __post_init__(self, parent: Misc):
+        super().__init__(parent, text="Tasks:")
         self.fields=[]
-        self.grid(**kwargs)
-        self.json_file=path.join("data","tasks.json")
         frame=Frame(self)
         frame.grid(row=0,column=1, columnspan=3)
-        self.restart_button=Button(frame, text="Hack", command=lambda: self.start_extra(True))
-        self.restart_button.grid(row=0, column=1)
-        self.print_button=Button(frame, text="Print Screen", command=parent.device.printScreen)
+        #old code from DT needs to be put in seperate file
+        # self.restart_button=Button(frame, text="Hack", command=lambda: self.start_extra(True))
+        # self.restart_button.grid(row=0, column=1)
+        self.print_button=Button(frame, text="Print Screen", command=self.device.printScreen)
         self.print_button.grid(row=0, column=2)
         self.start_button=Button(frame, text="Start Tasks", command=self.start_tasks)
         self.start_button.grid(column=3, row=0)
-        self.build(loadJSON(self.json_file))
+        self.build(self.jsons.load("tasks"))
 
     def start_tasks(self):
         if self.tasklist.paused:
@@ -199,15 +195,6 @@ class Tasks(LabelFrame):
         else:
             self.start_button.configure(text="Start Tasks")
             self.tasklist.pause()
-
-    def start_extra(self,go=False):
-        if go:
-            self.master.start_hack()
-            self.restart_button.configure(text="Reset", command=self.start_extra)
-        else:
-            self.master.restart_app()
-            self.restart_button.configure(text="Hack", command=lambda:self.start_extra(True))
-
 
     def build(self, data):
         print(data)
@@ -222,4 +209,4 @@ class Tasks(LabelFrame):
         for task in self.fields:
             name,data=task.get()
             alldata[name]=data
-        saveJSON(alldata,self.json_file)
+        self.jsons.save(alldata, "tasks")
